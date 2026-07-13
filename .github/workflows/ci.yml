@@ -8,12 +8,7 @@ on:
   pull_request:
     branches:
       - main
-
-permissions:
-  contents: read
-  actions: read
-  checks: write
-  statuses: write
+  workflow_dispatch:
 
 env:
   UV_CACHE_DIR: /tmp/.uv-cache
@@ -70,27 +65,23 @@ jobs:
 
       - name: Summary
         if: always()
+        shell: python
         run: |
-          echo "## Behavioral Proof" >> $GITHUB_STEP_SUMMARY
-          if [ -f reports/bdd-report.json ]; then
-            python3 - << 'PYEOF'
-          import json
+          import json, os, pathlib
           data = json.load(open("reports/bdd-report.json"))
           total = sum(len(f.get("elements",[])) for f in data)
           passed = sum(
               1 for f in data for sc in f.get("elements",[])
               if all(s["result"]["status"]=="passed" for s in sc.get("steps",[]))
           )
-          with open("/tmp/summary.md", "w") as out:
-              out.write("| Metric | Count |\n")
-              out.write("|--------|-------|\n")
+          summary = os.environ.get("GITHUB_STEP_SUMMARY", "/tmp/summary.md")
+          with open(summary, "a") as out:
+              out.write("## Behavioral Proof\n\n")
+              out.write(f"| Metric | Count |\n|--------|-------|\n")
               out.write(f"| Features | {len(data)} |\n")
               out.write(f"| Scenarios | {total} |\n")
               out.write(f"| Passed | {passed} |\n")
               out.write(f"| Failed | {total - passed} |\n")
-          PYEOF
-            cat /tmp/summary.md >> $GITHUB_STEP_SUMMARY
-          fi
 
       - uses: actions/upload-artifact@v4
         if: always()
@@ -100,9 +91,6 @@ jobs:
 
   # ─────────────────────────────────
   # Gate 3: Unit + Integration
-  #
-  # Supporting evidence. Does not
-  # replace the behavioral proof.
   # ─────────────────────────────────
   test-312:
     name: "Tests (py3.12)"
