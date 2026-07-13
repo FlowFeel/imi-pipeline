@@ -13,6 +13,7 @@ permissions:
   contents: read
   actions: read
   checks: write
+  statuses: write
 
 env:
   UV_CACHE_DIR: /tmp/.uv-cache
@@ -25,8 +26,6 @@ jobs:
   lint:
     name: "Lint"
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     steps:
       - uses: actions/checkout@v4
 
