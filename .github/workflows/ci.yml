@@ -2,9 +2,12 @@ name: CI
 
 on:
   push:
-    branches: [main, "feature/**"]
+    branches:
+      - main
+      - "feature/**"
   pull_request:
-    branches: [main]
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -13,16 +16,20 @@ env:
   UV_CACHE_DIR: /tmp/.uv-cache
 
 jobs:
+
   # ─────────────────────────────────
   # Gate 1: Code Quality
   # ─────────────────────────────────
   lint:
-    name: "🔍 Lint"
+    name: "Lint"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: astral-sh/setup-uv@v8
-        with: { enable-cache: true }
+        with:
+          enable-cache: true
+
       - run: uv sync --all-extras
       - run: uv run ruff check src/ tests/ features/
       - run: uv run ruff format --check src/ tests/ features/
@@ -30,21 +37,23 @@ jobs:
   # ─────────────────────────────────
   # Gate 2: Behavioral Proof
   #
-  # Outside-in: the contract is
-  # verified before the internals.
-  # If BDD fails, unit results are
-  # irrelevant.
+  # Outside-in: the contract is verified
+  # before the internals. If BDD fails,
+  # unit results are irrelevant.
   #
   # Lineage: phosphene/go_bdd_reference
   # ─────────────────────────────────
   bdd:
-    name: "📋 Behavioral Proof"
+    name: "Behavioral Proof"
     runs-on: ubuntu-latest
     needs: lint
     steps:
       - uses: actions/checkout@v4
+
       - uses: astral-sh/setup-uv@v8
-        with: { enable-cache: true }
+        with:
+          enable-cache: true
+
       - run: uv sync --all-extras
       - run: mkdir -p reports
 
@@ -59,22 +68,26 @@ jobs:
       - name: Summary
         if: always()
         run: |
-          echo "## 📋 Behavioral Proof" >> $GITHUB_STEP_SUMMARY
+          echo "## Behavioral Proof" >> $GITHUB_STEP_SUMMARY
           if [ -f reports/bdd-report.json ]; then
-            python3 << 'PYEOF'
-          import json, sys
+            python3 - << 'PYEOF'
+          import json
           data = json.load(open("reports/bdd-report.json"))
           total = sum(len(f.get("elements",[])) for f in data)
-          passed = sum(1 for f in data for sc in f.get("elements",[])
-                       if all(s["result"]["status"]=="passed" for s in sc.get("steps",[])))
-          print(f"| Metric | Count |")
-          print(f"|--------|-------|")
-          print(f"| Features | {len(data)} |")
-          print(f"| Scenarios | {total} |")
-          print(f"| ✅ Passed | {passed} |")
-          print(f"| ❌ Failed | {total - passed} |")
+          passed = sum(
+              1 for f in data for sc in f.get("elements",[])
+              if all(s["result"]["status"]=="passed" for s in sc.get("steps",[]))
+          )
+          with open("/tmp/summary.md", "w") as out:
+              out.write("| Metric | Count |\n")
+              out.write("|--------|-------|\n")
+              out.write(f"| Features | {len(data)} |\n")
+              out.write(f"| Scenarios | {total} |\n")
+              out.write(f"| Passed | {passed} |\n")
+              out.write(f"| Failed | {total - passed} |\n")
           PYEOF
-          fi >> $GITHUB_STEP_SUMMARY
+            cat /tmp/summary.md >> $GITHUB_STEP_SUMMARY
+          fi
 
       - uses: actions/upload-artifact@v4
         if: always()
@@ -88,46 +101,77 @@ jobs:
   # Supporting evidence. Does not
   # replace the behavioral proof.
   # ─────────────────────────────────
-  test:
-    name: "🧪 Tests (py${{ matrix.python }})"
+  test-312:
+    name: "Tests (py3.12)"
     runs-on: ubuntu-latest
     needs: lint
-    strategy:
-      matrix:
-        python: ["3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
+
       - uses: astral-sh/setup-uv@v8
-        with: { enable-cache: true }
-      - run: uv python install ${{ matrix.python }}
-      - run: uv sync --all-extras --python ${{ matrix.python }}
+        with:
+          enable-cache: true
+
+      - run: uv python install 3.12
+      - run: uv sync --all-extras --python 3.12
 
       - name: Run tests
         run: |
           uv run pytest tests/unit tests/integration \
             -v --tb=short \
-            --junitxml=reports/test-${{ matrix.python }}.xml
+            --junitxml=reports/test-312.xml
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: test-results-${{ matrix.python }}
-          path: reports/test-${{ matrix.python }}.xml
+          name: test-results-312
+          path: reports/test-312.xml
+
+  test-313:
+    name: "Tests (py3.13)"
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v8
+        with:
+          enable-cache: true
+
+      - run: uv python install 3.13
+      - run: uv sync --all-extras --python 3.13
+
+      - name: Run tests
+        run: |
+          uv run pytest tests/unit tests/integration \
+            -v --tb=short \
+            --junitxml=reports/test-313.xml
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-313
+          path: reports/test-313.xml
 
   # ─────────────────────────────────
   # Summary Gate
   # ─────────────────────────────────
   ci-pass:
-    name: "✅ CI"
+    name: "CI"
     runs-on: ubuntu-latest
-    needs: [lint, bdd, test]
+    needs: [lint, bdd, test-312, test-313]
     if: always()
     steps:
-      - run: |
-          for result in "${{ needs.lint.result }}" "${{ needs.bdd.result }}" "${{ needs.test.result }}"; do
-            if [ "$result" != "success" ]; then
-              echo "❌ Gate failed: $result"
-              exit 1
-            fi
-          done
-          echo "✅ All gates passed"
+      - name: Check all gates
+        run: |
+          LINT="${{ needs.lint.result }}"
+          BDD="${{ needs.bdd.result }}"
+          T312="${{ needs.test-312.result }}"
+          T313="${{ needs.test-313.result }}"
+          echo "lint=$LINT bdd=$BDD test-312=$T312 test-313=$T313"
+          if [ "$LINT" != "success" ] || [ "$BDD" != "success" ] || \
+             [ "$T312" != "success" ] || [ "$T313" != "success" ]; then
+            echo "One or more gates failed"
+            exit 1
+          fi
+          echo "All gates passed"
