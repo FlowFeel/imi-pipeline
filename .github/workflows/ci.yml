@@ -11,6 +11,8 @@ on:
 
 permissions:
   contents: read
+  actions: read
+  checks: write
 
 env:
   UV_CACHE_DIR: /tmp/.uv-cache
