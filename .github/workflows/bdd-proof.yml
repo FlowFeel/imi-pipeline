@@ -55,14 +55,14 @@ jobs:
               n = len(scs)
               p = sum(
                   1 for sc in scs
-                  if all(s["result"]["status"] == "passed" for s in sc.get("steps", []))
+                  if all(s.get("result",{}).get("status") == "passed" for s in sc.get("steps", []))
               )
               st = "PASS" if p == n else f"PARTIAL {p}/{n}"
               lines.append(f"| {name} | {n} | {p} | {st} |")
           total = sum(len(f.get("elements", [])) for f in data)
           tp = sum(
               1 for f in data for sc in f.get("elements", [])
-              if all(s["result"]["status"] == "passed" for s in sc.get("steps", []))
+              if all(s.get("result",{}).get("status") == "passed" for s in sc.get("steps", []))
           )
           lines += ["", f"**{tp}/{total} scenarios, {len(data)} features**"]
           pathlib.Path("reports/spec/index.md").write_text("\n".join(lines) + "\n")

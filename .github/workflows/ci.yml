@@ -72,7 +72,7 @@ jobs:
           total = sum(len(f.get("elements",[])) for f in data)
           passed = sum(
               1 for f in data for sc in f.get("elements",[])
-              if all(s["result"]["status"]=="passed" for s in sc.get("steps",[]))
+              if all(s.get("result",{}).get("status")=="passed" for s in sc.get("steps",[]))
           )
           summary = os.environ.get("GITHUB_STEP_SUMMARY", "/tmp/summary.md")
           with open(summary, "a") as out:

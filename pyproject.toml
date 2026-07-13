@@ -46,6 +46,10 @@ asyncio_mode = "auto"
 testpaths = ["tests/unit", "tests/integration"]
 markers = [
     "live: tests requiring real external services (skip in CI)",
+    "temporal_server: tests requiring Temporal test server binary",
+]
+filterwarnings = [
+    "ignore::RuntimeWarning",
 ]
 
 [tool.ruff]
