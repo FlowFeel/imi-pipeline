@@ -19,8 +19,6 @@ OKR: @okr_publish_pipeline
 
 from __future__ import annotations
 
-import pytest
-
 from phosphene.imi.parser import WikitextParser
 
 
@@ -115,13 +113,7 @@ class TestExtractArticleParams:
 
     def test_nested_template_does_not_split_outer(self) -> None:
         """A pipe inside a nested template does not split outer template params."""
-        wikitext = (
-            "{{Article"
-            "|Headline=Test"
-            "|Author={{if|a|b}}"
-            "|Category=Weird"
-            "}}"
-        )
+        wikitext = "{{Article|Headline=Test|Author={{if|a|b}}|Category=Weird}}"
         params = WikitextParser.extract_article_params(wikitext)
         # Author should be the nested template string, not split
         assert "author" in params
@@ -168,8 +160,7 @@ class TestExtractArticleParams:
     def test_article_template_with_preceding_template(self) -> None:
         """{{Article}} after another template is located and parsed."""
         wikitext = (
-            "{{Stub}}\n"
-            "{{Article|Author=First Found|Category=Science|Headline=H}}"
+            "{{Stub}}\n{{Article|Author=First Found|Category=Science|Headline=H}}"
         )
         params = WikitextParser.extract_article_params(wikitext)
         assert params["author"] == "First Found"

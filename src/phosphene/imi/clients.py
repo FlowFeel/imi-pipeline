@@ -16,7 +16,7 @@ from phosphene.imi.protocols import HTTPResponseProtocol
 class UrllibHTTPResponse:
     """Concrete wrapper around urllib's HTTPResponse."""
 
-    def __init__(self, response: Any) -> None:  # noqa: ANN401
+    def __init__(self, response: Any) -> None:
         """Eagerly record the status from the HTTPResponse object."""
         self._status = int(response.status)
 

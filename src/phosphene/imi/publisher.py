@@ -183,23 +183,27 @@ class ObservatoryPublisher:
             PublishError: If login fails.
         """
         # Step 1: Get login token
-        token_resp = self._api_get({
-            "action": "query",
-            "meta": "tokens",
-            "type": "login",
-        })
+        token_resp = self._api_get(
+            {
+                "action": "query",
+                "meta": "tokens",
+                "type": "login",
+            }
+        )
         login_token = token_resp.get("query", {}).get("tokens", {}).get("logintoken")
         if not login_token:
             raise PublishError(f"No login token in response: {token_resp}")
 
         # Step 2: POST login
-        login_resp = self._api_post({
-            "action": "login",
-            "lgname": self.username,
-            "lgpassword": self.password,
-            "lgtoken": login_token,
-            "format": "json",
-        })
+        login_resp = self._api_post(
+            {
+                "action": "login",
+                "lgname": self.username,
+                "lgpassword": self.password,
+                "lgtoken": login_token,
+                "format": "json",
+            }
+        )
         result = login_resp.get("login", {}).get("result")
         if result != "Success":
             raise PublishError(
@@ -218,11 +222,13 @@ class ObservatoryPublisher:
         Raises:
             PublishError: If the token cannot be obtained.
         """
-        resp = self._api_get({
-            "action": "query",
-            "meta": "tokens",
-            "type": "csrf",
-        })
+        resp = self._api_get(
+            {
+                "action": "query",
+                "meta": "tokens",
+                "type": "csrf",
+            }
+        )
         token = resp.get("query", {}).get("tokens", {}).get("csrftoken")
         if not token:
             raise PublishError(f"No CSRF token in response: {resp}")
@@ -249,21 +255,22 @@ class ObservatoryPublisher:
         Raises:
             PublishError: If the edit API returns an error.
         """
-        resp = self._api_post({
-            "action": "edit",
-            "title": title,
-            "text": text,
-            "token": token,
-            "summary": summary,
-            "bot": "1",
-            "format": "json",
-        })
+        resp = self._api_post(
+            {
+                "action": "edit",
+                "title": title,
+                "text": text,
+                "token": token,
+                "summary": summary,
+                "bot": "1",
+                "format": "json",
+            }
+        )
         edit_result = resp.get("edit", {})
         if edit_result.get("result") != "Success":
             error = resp.get("error", {})
             raise PublishError(
-                f"MW edit failed for '{title}': "
-                f"{error.get('info', edit_result)}"
+                f"MW edit failed for '{title}': {error.get('info', edit_result)}"
             )
         logger.debug(
             "Page '%s' %s",

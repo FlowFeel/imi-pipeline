@@ -13,11 +13,11 @@ OKR: @okr_publish_pipeline
 from __future__ import annotations
 
 from fastapi import FastAPI
+from phosphene.temporal.client import get_client
 from pydantic import BaseModel
 
 from phosphene.imi.dispatcher import SyndicationDispatcher
 from phosphene.imi.request import SyndicationRequest
-from phosphene.temporal.client import get_client
 
 app = FastAPI(title="IMI Syndication API")
 

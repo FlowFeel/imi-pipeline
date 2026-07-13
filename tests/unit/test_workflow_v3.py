@@ -24,7 +24,6 @@ OKR: @okr_publish_pipeline
 from __future__ import annotations
 
 from dataclasses import asdict
-from typing import Callable
 
 import pytest
 from temporalio import activity
@@ -33,7 +32,6 @@ from temporalio.worker import Worker
 
 from phosphene.imi.request import SyndicationRequest
 from phosphene.imi.workflow import SyndicationSagaWorkflow
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -178,7 +176,12 @@ class TestSyndicationSagaWorkflowV3:
         """Request with only salesforce=True runs only SF; WP and MW results absent."""
         comp_log: list[str] = []
         req = _make_request(
-            outlets={"wordpress": False, "salesforce": True, "mediawiki": False, "pardot": False}
+            outlets={
+                "wordpress": False,
+                "salesforce": True,
+                "mediawiki": False,
+                "pardot": False,
+            }
         )
 
         async with await WorkflowEnvironment.start_time_skipping() as env:
@@ -207,7 +210,12 @@ class TestSyndicationSagaWorkflowV3:
         """Request with only pardot=True runs send_pardot_email."""
         comp_log: list[str] = []
         req = _make_request(
-            outlets={"wordpress": False, "salesforce": False, "mediawiki": False, "pardot": True}
+            outlets={
+                "wordpress": False,
+                "salesforce": False,
+                "mediawiki": False,
+                "pardot": True,
+            }
         )
 
         async with await WorkflowEnvironment.start_time_skipping() as env:
@@ -250,7 +258,11 @@ class TestSyndicationSagaWorkflowV3:
         # Rebuild activities but override sync_salesforce
         acts = _make_activities(comp_log)
         # Replace the sync_salesforce slot with sf_fail
-        acts = [a for a in acts if getattr(a, "__name__", str(a)) not in ("mock_sync_salesforce",)]
+        acts = [
+            a
+            for a in acts
+            if getattr(a, "__name__", str(a)) not in ("mock_sync_salesforce",)
+        ]
         acts_with_sf_fail = acts + [sf_fail]
 
         async with await WorkflowEnvironment.start_time_skipping() as env:
@@ -297,7 +309,9 @@ class TestSyndicationSagaWorkflowV3:
 
         acts = _make_activities(comp_log)
         acts_with_mw_fail = [
-            a for a in acts if getattr(a, "__name__", "") not in ("mock_publish_mediawiki",)
+            a
+            for a in acts
+            if getattr(a, "__name__", "") not in ("mock_publish_mediawiki",)
         ] + [mw_fail]
 
         async with await WorkflowEnvironment.start_time_skipping() as env:
@@ -338,7 +352,9 @@ class TestSyndicationSagaWorkflowV3:
 
         acts = _make_activities(comp_log)
         acts_with_wp_fail = [
-            a for a in acts if getattr(a, "__name__", "") not in ("mock_publish_wordpress",)
+            a
+            for a in acts
+            if getattr(a, "__name__", "") not in ("mock_publish_wordpress",)
         ] + [wp_fail]
 
         async with await WorkflowEnvironment.start_time_skipping() as env:
@@ -374,7 +390,12 @@ class TestSyndicationSagaWorkflowV3:
 
         # Enable SF + MW + pardot; disable WP so order = SF, MW, pardot
         req = _make_request(
-            outlets={"wordpress": False, "salesforce": True, "mediawiki": True, "pardot": True}
+            outlets={
+                "wordpress": False,
+                "salesforce": True,
+                "mediawiki": True,
+                "pardot": True,
+            }
         )
 
         @activity.defn(name="send_pardot_email")
@@ -388,8 +409,10 @@ class TestSyndicationSagaWorkflowV3:
 
         acts = _make_activities(comp_log)
         final_acts = [
-            a for a in acts
-            if getattr(a, "__name__", "") not in ("mock_send_pardot_email", "mock_delete_mw")
+            a
+            for a in acts
+            if getattr(a, "__name__", "")
+            not in ("mock_send_pardot_email", "mock_delete_mw")
         ] + [pardot_fail, mw_delete_fail]
 
         async with await WorkflowEnvironment.start_time_skipping() as env:
@@ -411,14 +434,19 @@ class TestSyndicationSagaWorkflowV3:
         comps = result["compensations_executed"]
         assert len(comps) == 2
         assert comps[0].startswith("failed:")  # MW delete failed
-        assert comps[1] == "ok"                # SF delete succeeded
+        assert comps[1] == "ok"  # SF delete succeeded
 
     @pytest.mark.asyncio
     async def test_no_outlets_selected_returns_success_empty(self) -> None:
         """All outlets disabled → saga completes with succeeded=True, empty results."""
         comp_log: list[str] = []
         req = _make_request(
-            outlets={"wordpress": False, "salesforce": False, "mediawiki": False, "pardot": False}
+            outlets={
+                "wordpress": False,
+                "salesforce": False,
+                "mediawiki": False,
+                "pardot": False,
+            }
         )
 
         async with await WorkflowEnvironment.start_time_skipping() as env:
@@ -444,9 +472,7 @@ class TestSyndicationSagaWorkflowV3:
     async def test_unknown_outlet_recorded_as_error_saga_continues(self) -> None:
         """An unknown outlet name is recorded with error; remaining outlets continue."""
         comp_log: list[str] = []
-        req = _make_request(
-            outlets={"unknown_outlet": True, "salesforce": True}
-        )
+        req = _make_request(outlets={"unknown_outlet": True, "salesforce": True})
 
         async with await WorkflowEnvironment.start_time_skipping() as env:
             async with Worker(

@@ -32,7 +32,11 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
-    from phosphene.imi.request import OutletOutcome, SyndicationRequest, SyndicationResult
+    from phosphene.imi.request import (
+        OutletOutcome,
+        SyndicationRequest,
+        SyndicationResult,
+    )
 
 
 @workflow.defn
@@ -98,9 +102,7 @@ class SyndicationSagaWorkflow:
         enabled_outlets = {name for name, flag in req.outlets.items() if flag}
         selected = [
             name for name in self.OUTLET_REGISTRY if name in enabled_outlets
-        ] + [
-            name for name in enabled_outlets if name not in self.OUTLET_REGISTRY
-        ]
+        ] + [name for name in enabled_outlets if name not in self.OUTLET_REGISTRY]
 
         for outlet_name in selected:
             if outlet_name not in self.OUTLET_REGISTRY:

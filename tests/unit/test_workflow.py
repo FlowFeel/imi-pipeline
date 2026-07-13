@@ -30,10 +30,12 @@ from phosphene.imi.request import SyndicationRequest
 # Test request — minimal SyndicationRequest for workflow tests
 # ---------------------------------------------------------------------------
 
-TEST_REQUEST = asdict(SyndicationRequest(
-    title="IMI Integration Test — Cave Behaviours v8",
-    body="Integration test article. Do not publish.",
-))
+TEST_REQUEST = asdict(
+    SyndicationRequest(
+        title="IMI Integration Test — Cave Behaviours v8",
+        body="Integration test article. Do not publish.",
+    )
+)
 
 
 # ---------------------------------------------------------------------------

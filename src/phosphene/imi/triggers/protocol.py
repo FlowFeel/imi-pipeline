@@ -39,7 +39,7 @@ class SyndicationTrigger(Protocol):
     - Content transformation for specific outlets (outlet's job)
     """
 
-    async def handle(self, event: dict) -> "SyndicationRequest":
+    async def handle(self, event: dict) -> SyndicationRequest:
         """Parse an external event into a SyndicationRequest.
 
         Args:

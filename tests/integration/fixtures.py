@@ -27,7 +27,6 @@ import pytest
 
 from phosphene.imi.draft import Draft as ArticleDraft
 
-
 # ---------------------------------------------------------------------------
 # Lightweight fixture dataclass (no Pydantic validation overhead)
 # ---------------------------------------------------------------------------

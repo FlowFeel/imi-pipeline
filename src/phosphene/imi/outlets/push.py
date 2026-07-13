@@ -76,6 +76,4 @@ class PushOutlet(PublicationOutlet):
                 error="Push reported success but page not found on magazine",
             )
 
-        return OutletResult(
-            outlet=self.name, succeeded=True, artifact=page.full_url()
-        )
+        return OutletResult(outlet=self.name, succeeded=True, artifact=page.full_url())

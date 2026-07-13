@@ -22,27 +22,27 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict
 
 import pytest
 from temporalio import activity
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
-from phosphene.imi.workflow import SyndicationSagaWorkflow
-
 # ---------------------------------------------------------------------------
 # Minimal SyndicationRequest for E2E simulation
 # ---------------------------------------------------------------------------
-
 from phosphene.imi.request import SyndicationRequest as _SR
+from phosphene.imi.workflow import SyndicationSagaWorkflow
 
-DRAFT = asdict(_SR(
-    title="Why Care Work Matters",
-    body="Care work is foundational to society and the economy.",
-    author="Gunnar Rundgren",
-    category="Economy",
-))
+DRAFT = asdict(
+    _SR(
+        title="Why Care Work Matters",
+        body="Care work is foundational to society and the economy.",
+        author="Gunnar Rundgren",
+        category="Economy",
+    )
+)
 
 
 # ---------------------------------------------------------------------------
@@ -55,7 +55,9 @@ def _make_e2e_activities(comp_log: list[str]) -> list:
 
     @activity.defn(name="publish_wordpress")
     async def mock_wp(request: dict) -> str:
-        return "https://independentmediainstitute.org/imi_registry/why-care-work-matters/"
+        return (
+            "https://independentmediainstitute.org/imi_registry/why-care-work-matters/"
+        )
 
     @activity.defn(name="publish_mediawiki")
     async def mock_mw(request: dict) -> str:
@@ -86,8 +88,14 @@ def _make_e2e_activities(comp_log: list[str]) -> list:
         comp_log.append(f"NOOP:{artifact}")
 
     return [
-        mock_wp, mock_mw, mock_sf, mock_pardot,
-        mock_delete_wp, mock_delete_mw, mock_delete_sf, mock_noop,
+        mock_wp,
+        mock_mw,
+        mock_sf,
+        mock_pardot,
+        mock_delete_wp,
+        mock_delete_mw,
+        mock_delete_sf,
+        mock_noop,
     ]
 
 
@@ -245,7 +253,8 @@ class TestE2ESimulation:
 
         acts = _make_e2e_activities(comp_log)
         final_acts = [
-            a for a in acts
+            a
+            for a in acts
             if getattr(a, "__name__", "") not in ("mock_sf", "mock_delete_wp")
         ] + [sf_fail_comp, wp_delete_fail]
 

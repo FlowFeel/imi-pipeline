@@ -25,7 +25,9 @@ _DEFAULT_OUTLETS: dict[str, bool] = {
 }
 
 # All known outlet names for validation
-_KNOWN_OUTLETS: frozenset[str] = frozenset(["wordpress", "salesforce", "mediawiki", "pardot"])
+_KNOWN_OUTLETS: frozenset[str] = frozenset(
+    ["wordpress", "salesforce", "mediawiki", "pardot"]
+)
 
 
 class TelegramTrigger:

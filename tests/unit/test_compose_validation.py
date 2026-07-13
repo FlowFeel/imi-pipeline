@@ -38,19 +38,19 @@ ALPINE_IMAGES = {
 BASHISMS = [
     "/dev/tcp/",
     "/dev/udp/",
-    "[[",       # bash test
+    "[[",  # bash test
     "shopt",
     "declare -",
     "readarray",
     "mapfile",
-    "${!",       # indirect expansion
-    "<<<",       # here-string
+    "${!",  # indirect expansion
+    "<<<",  # here-string
 ]
 
 # Tools NOT available in standard alpine
 ALPINE_MISSING_TOOLS = [
-    "curl",      # use wget instead
-    "bash",      # use sh
+    "curl",  # use wget instead
+    "bash",  # use sh
     "grpc_health_probe",  # not bundled
 ]
 
@@ -237,9 +237,7 @@ class TestTemporalConfig:
             if not svc:
                 continue
             deps = svc.get("depends_on", {})
-            assert "temporal" in deps, (
-                f"Service '{name}' does not depend on temporal"
-            )
+            assert "temporal" in deps, f"Service '{name}' does not depend on temporal"
 
 
 class TestDependencyChain:

@@ -6,10 +6,6 @@ being hardcoded to observatory.wiki. This ensures V2 portability.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
-
-import pytest
-
 from phosphene.imi.publisher import ObservatoryPublisher
 
 
@@ -25,16 +21,12 @@ class TestUrlDerivation:
 
     def test_derive_wiki_base_bare_api(self) -> None:
         """Bare /api.php path (no /w/) derives /wiki/ base."""
-        base = ObservatoryPublisher._derive_wiki_base(
-            "http://localhost:8085/api.php"
-        )
+        base = ObservatoryPublisher._derive_wiki_base("http://localhost:8085/api.php")
         assert base == "http://localhost:8085/wiki/"
 
     def test_derive_wiki_base_with_port(self) -> None:
         """API URL with port derives correct wiki base."""
-        base = ObservatoryPublisher._derive_wiki_base(
-            "http://localhost:8085/w/api.php"
-        )
+        base = ObservatoryPublisher._derive_wiki_base("http://localhost:8085/w/api.php")
         assert base == "http://localhost:8085/wiki/"
 
     def test_canonical_url_uses_derived_base(self) -> None:

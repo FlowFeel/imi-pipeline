@@ -16,8 +16,6 @@ OKR: @okr_publish_pipeline
 
 from __future__ import annotations
 
-import pytest
-
 from phosphene.imi.request import OutletOutcome, SyndicationRequest, SyndicationResult
 
 
@@ -142,7 +140,7 @@ class TestFromDict:
         d = {
             "title": "Test",
             "body": "Body",
-            "keywords": ["a", "b"],         # Draft-only field
+            "keywords": ["a", "b"],  # Draft-only field
             "metadata": {"extra": "data"},  # Draft-only field
         }
         # Should not raise
@@ -153,7 +151,7 @@ class TestFromDict:
         """from_dict does not pass None values; dataclass defaults apply."""
         d = {"title": "T", "body": "B", "author": None, "category": None}
         req = SyndicationRequest.from_dict(d)
-        assert req.author == ""    # default
+        assert req.author == ""  # default
         assert req.category == ""  # default
 
 
@@ -165,7 +163,12 @@ class TestOutletSelection:
         req = SyndicationRequest(
             title="T",
             body="B",
-            outlets={"wordpress": True, "salesforce": False, "mediawiki": True, "pardot": False},
+            outlets={
+                "wordpress": True,
+                "salesforce": False,
+                "mediawiki": True,
+                "pardot": False,
+            },
         )
         selected = [name for name, enabled in req.outlets.items() if enabled]
         assert selected == ["wordpress", "mediawiki"]
@@ -175,7 +178,12 @@ class TestOutletSelection:
         req = SyndicationRequest(
             title="T",
             body="B",
-            outlets={"wordpress": False, "salesforce": False, "mediawiki": False, "pardot": True},
+            outlets={
+                "wordpress": False,
+                "salesforce": False,
+                "mediawiki": False,
+                "pardot": True,
+            },
         )
         selected = [name for name, enabled in req.outlets.items() if enabled]
         assert selected == ["pardot"]
@@ -210,10 +218,18 @@ class TestSyndicationResult:
     def test_with_outlet_results(self) -> None:
         """SyndicationResult.outlet_results is keyed by outlet name."""
         outcomes = {
-            "wordpress": OutletOutcome(outlet="wordpress", succeeded=True, artifact="https://wp.test/"),
-            "salesforce": OutletOutcome(outlet="salesforce", succeeded=False, error="timeout"),
+            "wordpress": OutletOutcome(
+                outlet="wordpress", succeeded=True, artifact="https://wp.test/"
+            ),
+            "salesforce": OutletOutcome(
+                outlet="salesforce", succeeded=False, error="timeout"
+            ),
         }
-        r = SyndicationResult(succeeded=False, outlet_results=outcomes, error_message="salesforce: timeout")
+        r = SyndicationResult(
+            succeeded=False,
+            outlet_results=outcomes,
+            error_message="salesforce: timeout",
+        )
         assert r.outlet_results["wordpress"].succeeded is True
         assert r.outlet_results["salesforce"].succeeded is False
         assert r.error_message == "salesforce: timeout"

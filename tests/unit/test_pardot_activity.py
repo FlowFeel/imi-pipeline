@@ -11,10 +11,13 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-import pytest
-
 from phosphene.imi.activities import SyndicationActivities
-from phosphene.imi.fakes import FakeMWClient, FakePardotClient, FakeSFClient, FakeWPClient
+from phosphene.imi.fakes import (
+    FakeMWClient,
+    FakePardotClient,
+    FakeSFClient,
+    FakeWPClient,
+)
 
 
 def _make_activities(pardot_client: Any | None = None) -> SyndicationActivities:
@@ -43,8 +46,14 @@ class TestSendPardotEmailWithOutletResults:
         request = {
             "title": "Test Article",
             "outlet_results": {
-                "observatory": {"succeeded": True, "artifact": "https://observatory.wiki/Draft:Test"},
-                "wordpress": {"succeeded": True, "artifact": "https://imi.org/wp/test/"},
+                "observatory": {
+                    "succeeded": True,
+                    "artifact": "https://observatory.wiki/Draft:Test",
+                },
+                "wordpress": {
+                    "succeeded": True,
+                    "artifact": "https://imi.org/wp/test/",
+                },
                 "salesforce": {"succeeded": True, "artifact": "a1e00000000001"},
             },
         }
@@ -59,8 +68,14 @@ class TestSendPardotEmailWithOutletResults:
         request = {
             "title": "Test Article",
             "outlet_results": {
-                "observatory": {"succeeded": True, "artifact": "https://observatory.wiki/Draft:Test"},
-                "wordpress": {"succeeded": True, "artifact": "https://imi.org/wp/test/"},
+                "observatory": {
+                    "succeeded": True,
+                    "artifact": "https://observatory.wiki/Draft:Test",
+                },
+                "wordpress": {
+                    "succeeded": True,
+                    "artifact": "https://imi.org/wp/test/",
+                },
             },
         }
         run(acts.send_pardot_email(request))
@@ -78,7 +93,10 @@ class TestSendPardotEmailWithOutletResults:
         request = {
             "title": "Test Article",
             "outlet_results": {
-                "observatory": {"succeeded": True, "artifact": "https://observatory.wiki/Draft:Test"},
+                "observatory": {
+                    "succeeded": True,
+                    "artifact": "https://observatory.wiki/Draft:Test",
+                },
                 "wordpress": {"succeeded": False, "error": "Network error"},
             },
         }
@@ -206,7 +224,9 @@ class TestFakePardotClientProtocol:
         """FakePardotClient.calls records each invocation."""
         fake = FakePardotClient()
         fake.send_pipeline_notification({"observatory": "https://obs.test"})
-        fake.send_pipeline_notification({"wordpress": "https://wp.test"}, recipients=None)
+        fake.send_pipeline_notification(
+            {"wordpress": "https://wp.test"}, recipients=None
+        )
 
         assert len(fake.calls) == 2
         assert fake.calls[0]["result"]["observatory"] == "https://obs.test"

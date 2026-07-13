@@ -5,9 +5,11 @@ No business logic here — that lives in the modules.
 
 OKR: @okr_publish_pipeline
 """
+
 from __future__ import annotations
 
 from behave import given, then, when
+
 from phosphene.imi.draft import Draft
 from phosphene.imi.publisher import ObservatoryPublisher
 
@@ -133,11 +135,7 @@ def step_article_has_mdat(context: object) -> None:
 
     api_url = context.publisher.api_url  # type: ignore[attr-defined]
     title = context.draft.title.replace(" ", "_")  # type: ignore[attr-defined]
-    query_url = (
-        f"{api_url}?action=ask"
-        f"&query=[[{title}]]|?Modification date"
-        f"&format=json"
-    )
+    query_url = f"{api_url}?action=ask&query=[[{title}]]|?Modification date&format=json"
     with urllib.request.urlopen(query_url, timeout=15) as resp:
         data = json.loads(resp.read())
 
@@ -222,7 +220,9 @@ def step_attempt_publish_invalid(context: object) -> None:
 @then("the draft is rejected with a validation error")
 def step_draft_rejected(context: object) -> None:
     """Assert the Draft validation caught the missing field."""
-    assert context.publish_error is not None, "Expected validation error but none raised"  # type: ignore[attr-defined]
+    assert context.publish_error is not None, (
+        "Expected validation error but none raised"
+    )  # type: ignore[attr-defined]
 
 
 @then("no article is created on observatory.wiki")

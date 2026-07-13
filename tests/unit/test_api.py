@@ -16,10 +16,9 @@ import pytest
 pytest.importorskip("fastapi")
 pytest.importorskip("httpx")
 
-from fastapi.testclient import TestClient  # noqa: E402
+from fastapi.testclient import TestClient
 
-from phosphene.imi.api import app  # noqa: E402
-
+from phosphene.imi.api import app
 
 # ---------------------------------------------------------------------------
 # Fake dispatcher injection
@@ -34,8 +33,8 @@ class FakeDispatcher:
 
     async def dispatch(self, request: object) -> str:
         self.dispatched.append(request)
-        from dataclasses import asdict
         from phosphene.imi.request import SyndicationRequest
+
         assert isinstance(request, SyndicationRequest)
         return f"syndication-{request.idempotency_key}"
 
@@ -82,6 +81,7 @@ class TestIMISyndicationAPI:
             return fake_client
 
         import phosphene.imi.api as api_module
+
         monkeypatch.setattr(api_module, "get_client", _fake_get_client)
 
         with TestClient(app) as client:
@@ -104,6 +104,7 @@ class TestIMISyndicationAPI:
             return fake_client
 
         import phosphene.imi.api as api_module
+
         monkeypatch.setattr(api_module, "get_client", _fake_get_client)
 
         payload = {
@@ -141,6 +142,7 @@ class TestIMISyndicationAPI:
             return fake_client
 
         import phosphene.imi.api as api_module
+
         monkeypatch.setattr(api_module, "get_client", _fake_get_client)
 
         with TestClient(app) as client:
@@ -169,6 +171,7 @@ class TestIMISyndicationAPI:
             return fake_client
 
         import phosphene.imi.api as api_module
+
         monkeypatch.setattr(api_module, "get_client", _fake_get_client)
 
         with TestClient(app) as client:

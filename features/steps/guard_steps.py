@@ -14,14 +14,11 @@ from pathlib import Path
 from behave import given, then, when
 
 # Make the integration package importable from BDD steps
-_integration_dir = str(
-    Path(__file__).parent.parent.parent / "tests" / "integration"
-)
+_integration_dir = str(Path(__file__).parent.parent.parent / "tests" / "integration")
 if _integration_dir not in sys.path:
     sys.path.insert(0, _integration_dir)
 
 from guard import DryRunGuard, ProductionWriteBlocked  # noqa: E402
-
 
 # ---------------------------------------------------------------------------
 # Given steps

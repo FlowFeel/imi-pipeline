@@ -19,7 +19,8 @@ OKR: @okr_publish_pipeline
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, fields as dc_fields
+from dataclasses import dataclass, field
+from dataclasses import fields as dc_fields
 
 
 @dataclass
@@ -82,7 +83,7 @@ class SyndicationRequest:
             self.idempotency_key = self.title.lower().replace(" ", "-")[:80]
 
     @classmethod
-    def from_dict(cls, d: dict) -> "SyndicationRequest":
+    def from_dict(cls, d: dict) -> SyndicationRequest:
         """Build from a dict, ignoring unknown fields.
 
         Backward-compatible with legacy Draft dicts: unknown fields

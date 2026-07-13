@@ -266,9 +266,7 @@ class TestEditPage:
         client = self._make_client()
         client._csrf_token = "test_csrf+\\"
 
-        edit_response = {
-            "edit": {"result": "Success", "pageid": 789, "title": "New"}
-        }
+        edit_response = {"edit": {"result": "Success", "pageid": 789, "title": "New"}}
         mock_resp = MagicMock()
         mock_resp.read.return_value = json.dumps(edit_response).encode()
         mock_resp.__enter__ = MagicMock(return_value=mock_resp)
@@ -305,12 +303,8 @@ class TestLoginTokenHandling:
         """Login step 2 sends the logintoken value as lgtoken param."""
         client = self._make_client()
 
-        token_response = {
-            "query": {"tokens": {"logintoken": "abc123token+\\"}}
-        }
-        login_response = {
-            "login": {"result": "Success", "lgusername": "FlowBot"}
-        }
+        token_response = {"query": {"tokens": {"logintoken": "abc123token+\\"}}}
+        login_response = {"login": {"result": "Success", "lgusername": "FlowBot"}}
 
         call_count = 0
 

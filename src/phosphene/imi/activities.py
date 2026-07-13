@@ -26,12 +26,16 @@ OKR: @okr_publish_pipeline
 
 from __future__ import annotations
 
-from dataclasses import asdict
 from typing import Any
 
 from temporalio import activity
 
-from phosphene.imi.protocols import MWClientProtocol, PardotClientProtocol, SFClientProtocol, WPClientProtocol
+from phosphene.imi.protocols import (
+    MWClientProtocol,
+    PardotClientProtocol,
+    SFClientProtocol,
+    WPClientProtocol,
+)
 
 
 class SyndicationActivities:
@@ -62,6 +66,7 @@ class SyndicationActivities:
         self._sf = sf_client
         if pardot_client is None:
             from phosphene.imi.fakes import FakePardotClient
+
             pardot_client = FakePardotClient()
         self._pardot_client = pardot_client
 
@@ -231,11 +236,17 @@ class SyndicationActivities:
         if isinstance(request, dict):
             publisher_id = request.get("publisher_id", "flow") or "flow"
             # Extract Draft-compatible fields, dropping SyndicationRequest-only keys
-            draft_keys = {"title", "body", "author", "category", "source_url",
-                          "keywords", "metadata"}
+            draft_keys = {
+                "title",
+                "body",
+                "author",
+                "category",
+                "source_url",
+                "keywords",
+                "metadata",
+            }
             draft_data: dict[str, Any] = {
-                k: v for k, v in request.items()
-                if k in draft_keys and v is not None
+                k: v for k, v in request.items() if k in draft_keys and v is not None
             }
             # Provide mandatory Draft fields if missing
             draft_data.setdefault("author", "Observatory")
@@ -247,6 +258,7 @@ class SyndicationActivities:
 
         if hasattr(request, "__dataclass_fields__"):
             from dataclasses import asdict as _asdict
+
             return SyndicationActivities._to_draft_and_publisher(_asdict(request))
 
         # Fallback: treat as dict-like

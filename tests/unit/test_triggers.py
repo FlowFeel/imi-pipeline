@@ -14,7 +14,6 @@ from phosphene.imi.request import SyndicationRequest
 from phosphene.imi.triggers import APITrigger, AsanaTrigger, TelegramTrigger
 from phosphene.imi.triggers.protocol import SyndicationTrigger
 
-
 # ---------------------------------------------------------------------------
 # Protocol conformance
 # ---------------------------------------------------------------------------
@@ -49,7 +48,12 @@ class TestAPITrigger:
             "body": "{{Article|Headline=Cave Art}}",
             "body_format": "wikitext",
             "author": "Jan",
-            "outlets": {"wordpress": True, "salesforce": False, "mediawiki": True, "pardot": False},
+            "outlets": {
+                "wordpress": True,
+                "salesforce": False,
+                "mediawiki": True,
+                "pardot": False,
+            },
         }
         result = await trigger.handle(event)
         assert isinstance(result, SyndicationRequest)
@@ -119,21 +123,30 @@ class TestTelegramTrigger:
     @pytest.mark.asyncio
     async def test_title_extracted_from_slug(self) -> None:
         trigger = TelegramTrigger()
-        event = {"message": "/syndicate https://observatory.wiki/Cave_Art_in_France", "sender_id": "x"}
+        event = {
+            "message": "/syndicate https://observatory.wiki/Cave_Art_in_France",
+            "sender_id": "x",
+        }
         result = await trigger.handle(event)
         assert result.title == "Cave Art in France"
 
     @pytest.mark.asyncio
     async def test_title_with_hyphens(self) -> None:
         trigger = TelegramTrigger()
-        event = {"message": "/syndicate https://observatory.wiki/climate-crisis-2026", "sender_id": "x"}
+        event = {
+            "message": "/syndicate https://observatory.wiki/climate-crisis-2026",
+            "sender_id": "x",
+        }
         result = await trigger.handle(event)
         assert result.title == "climate crisis 2026"
 
     @pytest.mark.asyncio
     async def test_body_is_empty_placeholder(self) -> None:
         trigger = TelegramTrigger()
-        event = {"message": "/syndicate https://observatory.wiki/Test", "sender_id": "x"}
+        event = {
+            "message": "/syndicate https://observatory.wiki/Test",
+            "sender_id": "x",
+        }
         result = await trigger.handle(event)
         assert result.body == ""
 

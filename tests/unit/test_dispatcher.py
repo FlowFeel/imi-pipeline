@@ -17,7 +17,6 @@ import pytest
 from phosphene.imi.dispatcher import SyndicationDispatcher
 from phosphene.imi.request import SyndicationRequest
 
-
 # ---------------------------------------------------------------------------
 # Fake Temporal client
 # ---------------------------------------------------------------------------
@@ -59,12 +58,14 @@ class FakeTemporalClient:
         Returns:
             Fake handle with the given ID.
         """
-        self.calls.append({
-            "workflow": workflow,
-            "arg": arg,
-            "id": id,
-            "task_queue": task_queue,
-        })
+        self.calls.append(
+            {
+                "workflow": workflow,
+                "arg": arg,
+                "id": id,
+                "task_queue": task_queue,
+            }
+        )
         return _FakeHandle(id=id)
 
 

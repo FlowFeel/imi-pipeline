@@ -150,7 +150,7 @@ class WikitextParser:
             List of string segments split on top-level ``|``.
         """
         segments: list[str] = []
-        brace_depth = 0    # tracks {{ / }}
+        brace_depth = 0  # tracks {{ / }}
         bracket_depth = 0  # tracks [[ / ]]
         current: list[str] = []
         i = 0

@@ -10,6 +10,7 @@ OKR: @okr_publish_pipeline
 from __future__ import annotations
 
 from behave import given, then, when
+
 from phosphene.imi.gate_types import HumanGateResult
 
 

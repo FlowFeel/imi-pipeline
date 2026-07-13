@@ -53,9 +53,7 @@ class PushClient:
             result = self._site.api("push", titles=title, targets=self._target_name)
             errors = result.get("push", {}).get("errors", [])
             if errors:
-                return PushResult(
-                    succeeded=False, title=title, error=str(errors[0])
-                )
+                return PushResult(succeeded=False, title=title, error=str(errors[0]))
             return PushResult(succeeded=True, title=title)
         except Exception as exc:
             return PushResult(succeeded=False, title=title, error=str(exc))

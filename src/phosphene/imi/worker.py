@@ -87,7 +87,12 @@ def _build_activities() -> SyndicationActivities:
     """
     mode = os.environ.get("IMI_CLIENT_MODE", "real")
     if mode == "fake":
-        from phosphene.imi.fakes import FakeMWClient, FakePardotClient, FakeSFClient, FakeWPClient
+        from phosphene.imi.fakes import (
+            FakeMWClient,
+            FakePardotClient,
+            FakeSFClient,
+            FakeWPClient,
+        )
 
         return SyndicationActivities(
             FakeWPClient(), FakeMWClient(), FakeSFClient(), FakePardotClient()

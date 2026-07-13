@@ -13,8 +13,8 @@ from phosphene.imi.triggers.protocol import SyndicationTrigger
 from phosphene.imi.triggers.telegram_trigger import TelegramTrigger
 
 __all__ = [
-    "SyndicationTrigger",
     "APITrigger",
-    "TelegramTrigger",
     "AsanaTrigger",
+    "SyndicationTrigger",
+    "TelegramTrigger",
 ]

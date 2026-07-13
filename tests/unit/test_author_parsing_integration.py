@@ -25,12 +25,9 @@ from __future__ import annotations
 
 from dataclasses import asdict
 
-import pytest
-
 from phosphene.imi.activities import SyndicationActivities
 from phosphene.imi.fakes import FakeMWClient, FakeSFClient, FakeWPClient
 from phosphene.imi.request import SyndicationRequest
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

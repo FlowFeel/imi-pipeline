@@ -67,11 +67,11 @@ class SalesforceOutlet(PublicationOutlet):
         """Initialise with an injectable Salesforce client."""
         self._client = client
         import os
+
         if object_type is None:
             mode = os.environ.get("IMI_PIPELINE_MODE", "production")
             object_type = (
-                self.TEST_OBJECT_TYPE if mode == "stage"
-                else self.DEFAULT_OBJECT_TYPE
+                self.TEST_OBJECT_TYPE if mode == "stage" else self.DEFAULT_OBJECT_TYPE
             )
         self._object_type = object_type
 

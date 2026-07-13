@@ -121,7 +121,6 @@ class TestWordPressOutlet:
         that idempotency checks use the same identity the WP REST API will
         sanitize to. A local _slugify that preserves non-ASCII breaks this.
         """
-        from phosphene.imi.draft import Draft
 
         client = FakeWPClient()
         outlet = WordPressOutlet(client=client)
@@ -231,11 +230,7 @@ class TestSalesforceOutlet:
         event = make_event()
         # Inject observatory_url into metadata — immutable so use model_copy
         draft_with_url = event.draft.model_copy(
-            update={
-                "metadata": {
-                    "observatory_url": "https://observatory.wiki/Test"
-                }
-            }
+            update={"metadata": {"observatory_url": "https://observatory.wiki/Test"}}
         )
         event_with_url = event.model_copy(update={"draft": draft_with_url})
         outlet.publish(event_with_url)

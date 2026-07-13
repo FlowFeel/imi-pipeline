@@ -6,8 +6,6 @@ IMI_PIPELINE_MODE env var, without touching Salesforce.
 
 from __future__ import annotations
 
-import os
-
 from phosphene.imi.fakes import FakeSFClient
 from phosphene.imi.outlets.salesforce import SalesforceOutlet
 

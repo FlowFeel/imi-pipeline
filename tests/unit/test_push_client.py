@@ -41,9 +41,7 @@ class TestPushClient:
 
     def test_push_page_handles_api_errors(self) -> None:
         site = MagicMock()
-        site.api.return_value = {
-            "push": {"errors": [{"message": "Permission denied"}]}
-        }
+        site.api.return_value = {"push": {"errors": [{"message": "Permission denied"}]}}
         client = PushClient(site=site, target_name="The Observatory")
         result = client.push_page("Article")
         assert result.succeeded is False
