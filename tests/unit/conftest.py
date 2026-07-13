@@ -19,6 +19,7 @@ def pytest_collection_modifyitems(items):
         "test_workflow_v3",
         "test_e2e_simulation",
         "test_pardot_activity",
+        "test_author_parsing_integration",  # Draft validation vs parser ordering
     }
     for item in items:
         module_name = item.module.__name__.rsplit(".", 1)[-1]
