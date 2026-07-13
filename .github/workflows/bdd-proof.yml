@@ -1,0 +1,64 @@
+name: Living Specification
+
+on:
+  push:
+    branches: [main]
+    paths: ['features/**', 'src/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  spec:
+    name: "📖 Specification Report"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with: { enable-cache: true }
+      - run: uv sync --all-extras
+      - run: mkdir -p reports/spec
+
+      - name: Generate specification
+        run: |
+          uv run behave features/ \
+            --no-capture \
+            --format json.pretty \
+            --outfile reports/spec/features.json \
+            --format plain \
+            --outfile reports/spec/proof.txt \
+            2>&1 || true
+
+          python3 << 'PYEOF'
+          import json, pathlib
+          data = json.load(open("reports/spec/features.json"))
+          lines = [
+              "# IMI Pipeline — Living Specification",
+              "",
+              "Lineage: [phosphene/go_bdd_reference](https://github.com/phosphene/go_bdd_reference)",
+              "",
+              "## Feature Inventory",
+              "",
+              "| Feature | Scenarios | Passed | Status |",
+              "|---------|-----------|--------|--------|",
+          ]
+          for feat in data:
+              name = feat.get("name","?")
+              scs = feat.get("elements",[])
+              n = len(scs)
+              p = sum(1 for sc in scs if all(
+                  s["result"]["status"]=="passed" for s in sc.get("steps",[])))
+              st = "✅" if p==n else f"⚠️ {p}/{n}"
+              lines.append(f"| {name} | {n} | {p} | {st} |")
+          total = sum(len(f.get("elements",[])) for f in data)
+          tp = sum(1 for f in data for sc in f.get("elements",[])
+                   if all(s["result"]["status"]=="passed" for s in sc.get("steps",[])))
+          lines += ["",f"**{tp}/{total} scenarios, {len(data)} features**"]
+          pathlib.Path("reports/spec/index.md").write_text("\n".join(lines)+"\n")
+          PYEOF
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: living-specification
+          path: reports/spec/
