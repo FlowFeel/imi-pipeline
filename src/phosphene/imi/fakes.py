@@ -66,6 +66,10 @@ class FakeMWClient:
         """Return the URL that would have been assigned."""
         return f"{self.base_url}/{title.replace(' ', '_')}"
 
+    def delete_page(self, title: str, reason: str = "") -> None:
+        """Remove a page from the fake store."""
+        self.pages.pop(title, None)
+
 
 class FakeWPClient:
     """Test double for WPClientProtocol.
@@ -108,6 +112,13 @@ class FakeWPClient:
         """Return the URL that would have been assigned."""
         return f"{self.base_url}/{post_type}/{slug}/"
 
+    def delete_post(self, post_url: str) -> None:
+        """Remove a post from the fake store by URL."""
+        for key, post in list(self.posts.items()):
+            if post.get("url") == post_url:
+                del self.posts[key]
+                return
+
 
 class FakeSFClient:
     """Test double for SFClientProtocol.
@@ -148,6 +159,17 @@ class FakeSFClient:
     ) -> bool:
         """True if a record with this field value was created."""
         return (object_type, value) in self.records
+
+    def delete_record(
+        self,
+        object_type: str,
+        record_id: str,
+    ) -> None:
+        """Remove a record from the fake store by Id."""
+        for key, record in list(self.records.items()):
+            if record.get("Id") == record_id:
+                del self.records[key]
+                return
 
 
 class FakePardotClient:

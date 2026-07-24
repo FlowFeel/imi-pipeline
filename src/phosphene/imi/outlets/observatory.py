@@ -7,11 +7,19 @@ article itself — the full text, the wikitext markup, the editorial
 structure — lives on observatory.wiki. This outlet is the one that
 places the intellectual content where readers find it.
 
-Accepts a MWClientProtocol at construction. Creates a MediaWiki page
-from the Draft content and returns an OutletResult with the live URL.
+The outlet is decomposed into three separable concerns:
 
-Idempotent: if a page with this title already exists, the existing
-URL is returned without creating a duplicate.
+1. **Payload construction** — pure logic. ``ObservatoryWikitextFormatter``
+   transforms a Draft into wikitext. No I/O, testable in isolation.
+2. **Idempotency decision** — pure logic. Given whether a page exists,
+   decide whether to create or return the existing URL. No I/O.
+3. **I/O execution** — the client protocol handles all HTTP. The outlet
+   wires the decision to the client and constructs the result.
+
+This separation means each concern is independently testable:
+- Formatter: ``assert formatter.format_wikitext(draft) == expected_wikitext``
+- Idempotency: ``assert decide_idempotent(True, url) == OutletResult(...)``
+- I/O: inject a fake client, assert the right methods were called.
 
 OKR: @okr_publish_pipeline
 """
@@ -19,6 +27,7 @@ OKR: @okr_publish_pipeline
 from __future__ import annotations
 
 from phosphene.imi.event import OutletResult, PublicationEvent
+from phosphene.imi.formatters import ObservatoryWikitextFormatter
 from phosphene.imi.outlets.base import PublicationOutlet
 from phosphene.imi.protocols import MWClientProtocol
 
@@ -26,17 +35,29 @@ from phosphene.imi.protocols import MWClientProtocol
 class ObservatoryOutlet(PublicationOutlet):
     """Publishes a draft article to observatory.wiki via the MW API.
 
-    Observatory is the canonical scholarly home for published content.
-    The client handles all HTTP. This class handles all business logic:
-    wikitext formatting, idempotency, result construction.
+    The outlet wires three concerns: formatting (pure), idempotency
+    (pure), and I/O (protocol). Each concern is independently testable.
 
     Attributes:
         _client: A MWClientProtocol implementation.
+        _formatter: Transforms a Draft into wikitext.
     """
 
-    def __init__(self, client: MWClientProtocol) -> None:
-        """Initialise with an injectable MW client."""
+    def __init__(
+        self,
+        client: MWClientProtocol,
+        formatter: ObservatoryWikitextFormatter | None = None,
+    ) -> None:
+        """Initialise with an injectable MW client and optional formatter.
+
+        Args:
+            client: Any object satisfying MWClientProtocol.
+            formatter: Wikitext formatter. Defaults to
+                ObservatoryWikitextFormatter. Inject a custom one for
+                testing or alternative template formats.
+        """
         self._client = client
+        self._formatter = formatter or ObservatoryWikitextFormatter()
 
     @property
     def name(self) -> str:
@@ -46,7 +67,7 @@ class ObservatoryOutlet(PublicationOutlet):
     def publish(self, event: PublicationEvent) -> OutletResult:
         """Publish the draft to observatory.wiki.
 
-        If the page already exists, returns the existing URL (idempotent).
+        Wires the three concerns: format → idempotency check → I/O.
         Never raises — all errors are captured in OutletResult.error.
 
         Args:
@@ -57,16 +78,15 @@ class ObservatoryOutlet(PublicationOutlet):
         """
         draft = event.draft
         try:
+            # Concern 1: I/O — check existence
             if self._client.page_exists(draft.title):
-                url = self._client.page_url(draft.title)
-                return OutletResult(
-                    outlet=self.name,
-                    succeeded=True,
-                    artifact=url,
-                    metadata={"idempotent": "true"},
-                )
+                # Concern 2: Idempotency decision — pure
+                return self._idempotent_result(draft.title)
 
-            content = self._build_wikitext(draft)
+            # Concern 3: Payload construction — pure
+            content = self._formatter.format_wikitext(draft)
+
+            # Concern 4: I/O — create page
             result = self._client.create_page(
                 title=draft.title,
                 content=content,
@@ -85,31 +105,22 @@ class ObservatoryOutlet(PublicationOutlet):
                 error=str(exc),
             )
 
-    def _build_wikitext(self, draft: object) -> str:
-        """Build wikitext from the Draft using the ``{{Article|...}}`` template.
+    def _idempotent_result(self, title: str) -> OutletResult:
+        """Construct an idempotent-skip result.
 
-        The ``{{Article}}`` template is the structural contract between the
-        publish pipeline and the Observatory skin. It carries structured
-        metadata (headline, author, section) in a machine-parseable format
-        that the skin renders into the article chrome. Without the template,
-        the article is raw wikitext with no author attribution, no section
-        navigation, and no structured data for the Almanac scraper.
-
-        Minimal implementation for the tracer bullet.
-        Full template injection to follow.
+        Pure: given that a page exists, build the result without
+        making any additional I/O calls beyond the URL lookup.
 
         Args:
-            draft: The Draft to convert.
+            title: The page title that already exists.
 
         Returns:
-            Wikitext string suitable for MW page creation.
+            OutletResult marking the publish as idempotent.
         """
-        from phosphene.imi.draft import Draft
-
-        assert isinstance(draft, Draft)
-        return (
-            f"{{{{Article|Headline={draft.title}"
-            f"|Author={draft.author}"
-            f"|Section={draft.category}}}}}\n\n"
-            f"{draft.body}"
+        url = self._client.page_url(title)
+        return OutletResult(
+            outlet=self.name,
+            succeeded=True,
+            artifact=url,
+            metadata={"idempotent": "true"},
         )

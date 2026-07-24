@@ -1,42 +1,27 @@
 """SalesforceOutlet — creates a Content_Management__c record on publish.
 
-``Content_Management__c`` exists because fundraising and editorial are
-causally linked but operationally separate. When Jan reports to funders,
-she needs to say "we published 47 articles this quarter across these
-categories" — that query runs against Salesforce, not against MediaWiki.
-The custom object bridges the gap: every published article gets a
-Salesforce record that fundraising dashboards, Pardot campaigns, and
-board reports can reference without querying the wiki.
+The outlet is decomposed into three separable concerns:
 
-Schema (discovered 2026-06-22 against live indmedia.my.salesforce.com)::
+1. **Payload construction** — pure logic. ``SalesforceRecordFormatter``
+   transforms a Draft into a Salesforce record payload. No I/O.
+2. **Idempotency decision** — pure logic. Given whether a record exists,
+   decide whether to create or return the existing artifact. No I/O.
+3. **I/O execution** — the client protocol handles all HTTP.
 
-    Name              — auto-number (NOT settable, omit from payload)
-    Headline__c       — article title
-    Date_Received__c  — date, REQUIRED
-    Pay__c            — boolean, REQUIRED (default False)
-    GTM_Site_Uploaded__c — boolean, REQUIRED (default False)
-    Translated__c     — boolean, REQUIRED (default False)
-    Observatory_Classics__c — boolean, REQUIRED (default False)
-    Observatory_wiki_Site_Link__c — URL (was Observatory_URL__c)
-    Observatory_wiki_Status__c    — picklist (was Status__c)
-    Observatory_Area__c           — picklist (was Category__c)
-    Contact__c        — reference (author lookup, optional)
+Schema (discovered 2026-06-22 against live indmedia.my.salesforce.com):
+Name is auto-number (not settable), title → Headline__c, category →
+Observatory_Area__c, status → Observatory_wiki_Status__c.
 
-Accepts a SFClientProtocol at construction. Creates a Salesforce record
-capturing the publication event and returns an OutletResult with the
-Salesforce record ID.
-
-Idempotent: checks by Headline__c (not Name, which is auto-number and
-not searchable by title).
+The object type is injected at construction — no env var reads inside
+the outlet. The caller (worker.py) decides production vs stage.
 
 OKR: @okr_publish_pipeline
 """
 
 from __future__ import annotations
 
-from datetime import date
-
 from phosphene.imi.event import OutletResult, PublicationEvent
+from phosphene.imi.formatters import SalesforceRecordFormatter
 from phosphene.imi.outlets.base import PublicationOutlet
 from phosphene.imi.protocols import SFClientProtocol
 
@@ -44,16 +29,10 @@ from phosphene.imi.protocols import SFClientProtocol
 class SalesforceOutlet(PublicationOutlet):
     """Creates a Salesforce Content_Management__c record on article publish.
 
-    The record enables downstream reporting, Pardot campaign attribution,
-    and board-level content analytics — none of which should require
-    querying the wiki directly.
-
-    The client handles all HTTP and OAuth. This class handles field mapping,
-    idempotency, and result construction.
-
     Attributes:
         _client: A SFClientProtocol implementation.
         _object_type: Salesforce object API name.
+        _formatter: Maps a Draft to a Salesforce record payload.
     """
 
     DEFAULT_OBJECT_TYPE = "Content_Management__c"
@@ -63,17 +42,20 @@ class SalesforceOutlet(PublicationOutlet):
         self,
         client: SFClientProtocol,
         object_type: str | None = None,
+        formatter: SalesforceRecordFormatter | None = None,
     ) -> None:
-        """Initialise with an injectable Salesforce client."""
-        self._client = client
-        import os
+        """Initialise with an injectable Salesforce client.
 
-        if object_type is None:
-            mode = os.environ.get("IMI_PIPELINE_MODE", "production")
-            object_type = (
-                self.TEST_OBJECT_TYPE if mode == "stage" else self.DEFAULT_OBJECT_TYPE
-            )
-        self._object_type = object_type
+        Args:
+            client: Any object satisfying SFClientProtocol.
+            object_type: Salesforce object API name. Defaults to
+                DEFAULT_OBJECT_TYPE. Caller decides production vs stage.
+            formatter: Record payload formatter. Defaults to
+                SalesforceRecordFormatter.
+        """
+        self._client = client
+        self._object_type = object_type or self.DEFAULT_OBJECT_TYPE
+        self._formatter = formatter or SalesforceRecordFormatter()
 
     @property
     def name(self) -> str:
@@ -83,14 +65,7 @@ class SalesforceOutlet(PublicationOutlet):
     def publish(self, event: PublicationEvent) -> OutletResult:
         """Create a Salesforce Content_Management__c record.
 
-        Field mapping reflects the live schema discovered 2026-06-22:
-        Name is auto-number (omitted), title goes to Headline__c,
-        category to Observatory_Area__c, status to Observatory_wiki_Status__c,
-        and the wiki link to Observatory_wiki_Site_Link__c.
-
-        Idempotency checks Headline__c — not Name (which is auto-number
-        and cannot be queried by title).
-
+        Wires: format → idempotency check → I/O.
         Never raises — all errors captured in OutletResult.error.
 
         Args:
@@ -102,10 +77,11 @@ class SalesforceOutlet(PublicationOutlet):
         draft = event.draft
         observatory_url: str | None = draft.metadata.get("observatory_url")
         try:
-            # Idempotency: check by Headline__c (Name is auto-number)
+            # Concern 1: I/O — check existence by Headline__c
             if self._client.record_exists(
                 self._object_type, "Headline__c", draft.title
             ):
+                # Concern 2: Idempotency decision — pure
                 return OutletResult(
                     outlet=self.name,
                     succeeded=True,
@@ -113,24 +89,10 @@ class SalesforceOutlet(PublicationOutlet):
                     metadata={"idempotent": "true"},
                 )
 
-            data: dict[str, str | bool] = {
-                # Title → Headline__c (Name is auto-number, never set)
-                "Headline__c": draft.title,
-                # Required date field
-                "Date_Received__c": date.today().isoformat(),
-                # Category → Observatory_Area__c (was Category__c)
-                "Observatory_Area__c": draft.category,
-                # Status → Observatory_wiki_Status__c (was Status__c)
-                "Observatory_wiki_Status__c": "Published",
-                # Required boolean fields — all default False
-                "Pay__c": False,
-                "GTM_Site_Uploaded__c": False,
-                "Translated__c": False,
-                "Observatory_Classics__c": False,
-            }
-            if observatory_url:
-                data["Observatory_wiki_Site_Link__c"] = observatory_url
+            # Concern 3: Payload construction — pure
+            data = self._formatter.format_payload(draft, observatory_url)
 
+            # Concern 4: I/O — create record
             record = self._client.create_record(self._object_type, data)
             sf_id = record.get("Id", "")
             return OutletResult(

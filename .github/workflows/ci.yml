@@ -23,23 +23,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
-
       - run: uv sync --all-extras
       - run: uv run ruff check src/ tests/ features/
       - run: uv run ruff format --check src/ tests/ features/
 
   # ─────────────────────────────────
-  # Gate 2: Behavioral Proof
+  # Gate 2: Behavioral Proof (BDD)
   #
   # Outside-in: the contract is verified
   # before the internals. If BDD fails,
   # unit results are irrelevant.
-  #
-  # Lineage: phosphene/go_bdd_reference
   # ─────────────────────────────────
   bdd:
     name: "Behavioral Proof"
@@ -47,14 +43,11 @@ jobs:
     needs: lint
     steps:
       - uses: actions/checkout@v4
-
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
-
       - run: uv sync --all-extras
       - run: mkdir -p reports
-
       - name: Run BDD features
         run: |
           uv run behave features/ \
@@ -63,26 +56,6 @@ jobs:
             --outfile reports/bdd-report.json \
             --format pretty
 
-      - name: Summary
-        if: always()
-        shell: python
-        run: |
-          import json, os, pathlib
-          data = json.load(open("reports/bdd-report.json"))
-          total = sum(len(f.get("elements",[])) for f in data)
-          passed = sum(
-              1 for f in data for sc in f.get("elements",[])
-              if all(s.get("result",{}).get("status")=="passed" for s in sc.get("steps",[]))
-          )
-          summary = os.environ.get("GITHUB_STEP_SUMMARY", "/tmp/summary.md")
-          with open(summary, "a") as out:
-              out.write("## Behavioral Proof\n\n")
-              out.write(f"| Metric | Count |\n|--------|-------|\n")
-              out.write(f"| Features | {len(data)} |\n")
-              out.write(f"| Scenarios | {total} |\n")
-              out.write(f"| Passed | {passed} |\n")
-              out.write(f"| Failed | {total - passed} |\n")
-
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -90,59 +63,74 @@ jobs:
           path: reports/bdd-report.json
 
   # ─────────────────────────────────
-  # Gate 3: Unit + Integration
+  # Gate 3: Unit Tests (no Docker)
   # ─────────────────────────────────
-  test-312:
-    name: "Tests (py3.12)"
+  unit:
+    name: "Unit Tests"
     runs-on: ubuntu-latest
     needs: lint
     steps:
       - uses: actions/checkout@v4
-
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
-
-      - run: uv python install 3.12
-      - run: uv sync --all-extras --python 3.12
-
-      - name: Run tests
+      - run: uv sync --all-extras
+      - name: Run unit tests
         run: |
-          uv run pytest tests/unit tests/integration \
+          uv run pytest tests/unit \
             -v --tb=short \
-            --junitxml=reports/test-312.xml
-
+            --junitxml=reports/unit.xml
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: test-results-312
-          path: reports/test-312.xml
+          name: unit-results
+          path: reports/unit.xml
 
-  test-313:
-    name: "Tests (py3.13)"
+  # ─────────────────────────────────
+  # Gate 4: Integration (Docker)
+  #
+  # Starts Temporal + MW containers.
+  # Runs the 52 saga tests against real
+  # Temporal and 8 MW contract tests
+  # against real MediaWiki.
+  # ─────────────────────────────────
+  integration:
+    name: "Integration (Docker)"
     runs-on: ubuntu-latest
-    needs: lint
+    needs: [lint, unit]
     steps:
       - uses: actions/checkout@v4
-
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
+      - run: uv sync --all-extras
 
-      - run: uv python install 3.13
-      - run: uv sync --all-extras --python 3.13
+      - name: Login to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-      - name: Run tests
+      - name: Start test stack
+        run: docker compose -f testdata/docker-compose.test.yml up -d --wait
+
+      - name: Run MW init scripts
+        run: |
+          docker exec imi-pipeline-web-1 bash /init/00-create-test-admin.sh
+          docker exec imi-pipeline-web-1 bash /init/01-seed-test-pages.sh
+
+      - name: Run all tests (Temporal + MW)
         run: |
           uv run pytest tests/unit tests/integration \
             -v --tb=short \
-            --junitxml=reports/test-313.xml
+            --junitxml=reports/integration.xml
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f testdata/docker-compose.test.yml down -v
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: test-results-313
-          path: reports/test-313.xml
+          name: integration-results
+          path: reports/integration.xml
 
   # ─────────────────────────────────
   # Summary Gate
@@ -150,19 +138,12 @@ jobs:
   ci-pass:
     name: "CI"
     runs-on: ubuntu-latest
-    needs: [lint, bdd, test-312, test-313]
+    needs: [lint, bdd, unit, integration]
     if: always()
     steps:
       - name: Check all gates
         run: |
-          LINT="${{ needs.lint.result }}"
-          BDD="${{ needs.bdd.result }}"
-          T312="${{ needs.test-312.result }}"
-          T313="${{ needs.test-313.result }}"
-          echo "lint=$LINT bdd=$BDD test-312=$T312 test-313=$T313"
-          if [ "$LINT" != "success" ] || [ "$BDD" != "success" ] || \
-             [ "$T312" != "success" ] || [ "$T313" != "success" ]; then
-            echo "One or more gates failed"
-            exit 1
-          fi
+          for r in "${{ needs.lint.result }}" "${{ needs.bdd.result }}" "${{ needs.unit.result }}" "${{ needs.integration.result }}"; do
+            if [ "$r" != "success" ]; then echo "Gate failed: $r"; exit 1; fi
+          done
           echo "All gates passed"

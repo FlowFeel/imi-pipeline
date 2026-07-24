@@ -1,0 +1,98 @@
+services:
+  # ── Temporal Stack ──
+  temporal-db:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: temporal
+      POSTGRES_DB: temporal
+    volumes:
+      - temporal-db-test:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "temporal"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  temporal:
+    image: temporalio/auto-setup:1.23.0
+    depends_on:
+      temporal-db:
+        condition: service_healthy
+    environment:
+      DBHOST: temporal-db
+      DBNAME: temporal
+      DB_USER: temporal
+      DB_PWD: temporal
+      LOG_LEVEL: error
+      DB_PORT: "5432"
+      DBTYPE: postgres12
+    ports:
+      - "7233:7233"
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "7233"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+
+  # ── MW Stack ──
+  db:
+    image: mysql:8.4.0
+    environment:
+      MYSQL_DATABASE: mediawiki_test
+      MYSQL_ROOT_PASSWORD: testpass
+    volumes:
+      - mw-db-test:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-ptestpass"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.0
+    environment:
+      discovery.type: single-node
+      ES_JAVA_OPTS: "-Xms256m -Xmx256m"
+      xpack.security.enabled: "false"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9200"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+
+  web:
+    image: ghcr.io/flowfeel/observatory-mediawiki:2.1.0-observatory
+    depends_on:
+      db:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    environment:
+      MW_DB_TYPE: mysql
+      MW_DB_SERVER: db
+      MW_DB_NAME: mediawiki_test
+      MW_DB_USER: root
+      MW_DB_PASSWORD: testpass
+      MW_SITE_SERVER: http://localhost:8085
+      MW_SITE_NAME: Test Wiki
+      MW_SITE_FQDN: localhost
+      MW_ENABLE_ELASTICSEARCH: "true"
+      MW_ELASTICSEARCH_HOST: elasticsearch
+      MW_ELASTICSEARCH_PORT: "9200"
+    ports:
+      - "8085:80"
+    volumes:
+      - ./testdata/init:/init:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/"]
+      interval: 10s
+      timeout: 10s
+      start_period: 60s
+      retries: 15
+
+volumes:
+  temporal-db-test:
+  mw-db-test:

@@ -174,8 +174,7 @@ class SyndicationActivities:
         Args:
             post_url: URL of the post to delete.
         """
-        if hasattr(self._wp, "delete_post"):
-            self._wp.delete_post(post_url)  # type: ignore[attr-defined]
+        self._wp.delete_post(post_url)
 
     @activity.defn
     async def delete_mediawiki_page(self, page_title: str) -> None:
@@ -184,8 +183,7 @@ class SyndicationActivities:
         Args:
             page_title: Title of the page to delete.
         """
-        if hasattr(self._mw, "delete_page"):
-            self._mw.delete_page(page_title, reason="Saga compensation rollback")  # type: ignore[attr-defined]
+        self._mw.delete_page(page_title, reason="Saga compensation rollback")
 
     @activity.defn
     async def delete_salesforce_record(self, sf_id: str) -> None:
@@ -194,8 +192,7 @@ class SyndicationActivities:
         Args:
             sf_id: Salesforce record ID to delete.
         """
-        if hasattr(self._sf, "delete_record"):
-            self._sf.delete_record("Content_Management__c", sf_id)  # type: ignore[attr-defined]
+        self._sf.delete_record("Content_Management__c", sf_id)
 
     @activity.defn
     async def noop_compensation(self, artifact: str) -> None:

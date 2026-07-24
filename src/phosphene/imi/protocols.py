@@ -22,7 +22,8 @@ class MWClientProtocol(Protocol):
     """Minimal MediaWiki API interface required by ObservatoryOutlet.
 
     Defines the MW operations an outlet needs: create or update a page,
-    check existence, and retrieve a page URL. Nothing else.
+    check existence, retrieve a page URL, and delete a page (for
+    saga compensation). Nothing else.
     """
 
     def create_page(
@@ -43,13 +44,18 @@ class MWClientProtocol(Protocol):
         """Canonical URL for a page title."""
         ...
 
+    def delete_page(self, title: str, reason: str = "") -> None:
+        """Delete a wiki page. Used by saga compensation."""
+        ...
+
 
 @runtime_checkable
 class WPClientProtocol(Protocol):
     """Minimal WordPress REST API interface required by WordPressOutlet.
 
     Defines the WP operations needed: create a post of a given type,
-    check if a post already exists by slug.
+    check if a post already exists by slug, get a post URL,
+    and delete a post (for saga compensation).
     """
 
     def create_post(
@@ -68,13 +74,18 @@ class WPClientProtocol(Protocol):
         """Canonical URL for a post type and slug."""
         ...
 
+    def delete_post(self, post_url: str) -> None:
+        """Delete a WordPress post. Used by saga compensation."""
+        ...
+
 
 @runtime_checkable
 class SFClientProtocol(Protocol):
     """Minimal Salesforce API interface required by SalesforceOutlet.
 
     Defines the Salesforce operations needed: create a record of a given
-    object type, check if a record already exists by a key field.
+    object type, check if a record already exists by a key field,
+    and delete a record (for saga compensation).
     """
 
     def create_record(
@@ -92,6 +103,14 @@ class SFClientProtocol(Protocol):
         value: str,
     ) -> bool:
         """True if a record of this type has field=value."""
+        ...
+
+    def delete_record(
+        self,
+        object_type: str,
+        record_id: str,
+    ) -> None:
+        """Delete a Salesforce record. Used by saga compensation."""
         ...
 
 

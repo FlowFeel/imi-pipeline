@@ -1,117 +1,153 @@
-"""Shared conftest for IMI integration tests.
+"""Integration test configuration — container lifecycle fixtures.
 
-Provides:
-  - imi_integration marker: tests skip unless IMI_INTEGRATION=true in env.
-  - Credential fixtures: each reads from env or skips with a clear message.
-  - sys.path patch so guard, validators, fixtures can be imported directly.
+Session-scoped fixtures that start Docker containers, wait for health,
+yield endpoints/clients, and tear down. Each fixture starts only the
+services it needs.
 
-Usage in tests::
+Fixtures:
+    temporal_endpoint: starts Temporal stack, yields "localhost:7233"
+    mw_client: starts MW stack, inits, yields UrllibMWClient
+    full_stack: starts everything, yields (temporal_endpoint, mw_client)
 
-    @pytest.mark.imi_integration
-    def test_something(sf_consumer_key, wp_username):
-        ...
+These fixtures use subprocess directly — no Makefiles, no wrappers.
+Docker must be available on the host.
 
 OKR: @okr_publish_pipeline
 """
 
 from __future__ import annotations
 
-import os
-import sys
+import subprocess
+import time
 from pathlib import Path
 
 import pytest
 
-# ---------------------------------------------------------------------------
-# sys.path — allow direct imports from the integration directory
-# ---------------------------------------------------------------------------
-
-_integration_dir = str(Path(__file__).parent)
-if _integration_dir not in sys.path:
-    sys.path.insert(0, _integration_dir)
+COMPOSE = Path(__file__).parent.parent.parent / "testdata" / "docker-compose.test.yml"
 
 
-# ---------------------------------------------------------------------------
-# imi_integration marker — skip unless IMI_INTEGRATION=true
-# ---------------------------------------------------------------------------
+def _compose_up(*services: str) -> None:
+    """Start named services via docker compose, waiting for health."""
+    cmd = ["docker", "compose", "-f", str(COMPOSE), "up", "-d", "--wait", *services]
+    subprocess.run(cmd, check=True)
 
 
-def pytest_configure(config: pytest.Config) -> None:
-    """Register the imi_integration marker."""
-    config.addinivalue_line(
-        "markers",
-        "imi_integration: mark test as requiring IMI_INTEGRATION=true in env",
-    )
+def _compose_down(*services: str) -> None:
+    """Stop and remove named services and their volumes."""
+    if services:
+        cmd = ["docker", "compose", "-f", str(COMPOSE), "rm", "-f", "-v", *services]
+    else:
+        cmd = ["docker", "compose", "-f", str(COMPOSE), "down", "-v"]
+    subprocess.run(cmd, check=True)
 
 
-def pytest_collection_modifyitems(
-    config: pytest.Config,
-    items: list[pytest.Item],
-) -> None:
-    """Skip tests marked imi_integration unless IMI_INTEGRATION=true."""
-    if os.environ.get("IMI_INTEGRATION", "").lower() not in {"true", "1", "yes"}:
-        skip_mark = pytest.mark.skip(
-            reason="Set IMI_INTEGRATION=true to run integration tests"
-        )
-        for item in items:
-            if item.get_closest_marker("imi_integration"):
-                item.add_marker(skip_mark)
+def _wait_for_http(url: str, timeout: int = 120) -> None:
+    """Wait for an HTTP endpoint to return 200."""
+    import requests
+
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            r = requests.get(url, timeout=5)
+            if r.status_code == 200:
+                return
+        except Exception:
+            pass
+        time.sleep(3)
+    raise TimeoutError(f"{url} did not become healthy within {timeout}s")
 
 
-# ---------------------------------------------------------------------------
-# Credential fixtures — each returns the value or skips
-# ---------------------------------------------------------------------------
+@pytest.fixture(scope="session")
+def temporal_endpoint():
+    """Start Temporal container, yield endpoint, tear down.
+
+    Yields:
+        str: The Temporal server endpoint (host:port).
+    """
+    _compose_up("temporal-db", "temporal")
+    yield "localhost:7233"
+    _compose_down("temporal-db", "temporal")
 
 
-def _env_or_skip(var: str) -> str:
-    """Read an env var or skip the test with a clear message.
-
-    Args:
-        var: Environment variable name.
+@pytest.fixture(scope="session")
+def mw_client():
+    """Start MW stack, run init scripts, yield a connected client.
 
     Returns:
-        The value of the env var.
-
-    Raises:
-        pytest.skip.Exception: If the env var is not set.
+        UrllibMWClient: Authenticated client connected to the test MW.
     """
-    value = os.environ.get(var)
-    if not value:
-        pytest.skip(f"Missing {var}")
-    return value
+    from phosphene.imi.clients.mediawiki import MWConfig, UrllibMWClient
+
+    _compose_up("db", "elasticsearch", "web")
+    _wait_for_http("http://localhost:8085/")
+
+    # Run init scripts
+    subprocess.run(
+        [
+            "docker",
+            "exec",
+            "imi-pipeline-web-1",
+            "bash",
+            "/init/00-create-test-admin.sh",
+        ],
+        check=True,
+    )
+    subprocess.run(
+        ["docker", "exec", "imi-pipeline-web-1", "bash", "/init/01-seed-test-pages.sh"],
+        check=True,
+    )
+
+    config = MWConfig(
+        base_url="http://localhost:8085",
+        username="TestBot",
+        password="testpass",
+    )
+    client = UrllibMWClient(config)
+    client.login()
+    client.get_csrf_token()
+    yield client
+    _compose_down("db", "elasticsearch", "web")
 
 
-@pytest.fixture
-def sf_consumer_key() -> str:
-    """Salesforce OAuth consumer key."""
-    return _env_or_skip("SF_CONSUMER_KEY")
+@pytest.fixture(scope="session")
+def full_stack(temporal_endpoint):
+    """Start both Temporal and MW stacks.
 
+    Yields:
+        tuple: (temporal_endpoint, mw_client)
+    """
+    # temporal_endpoint fixture already started Temporal.
+    # We need mw_client too — but we can't call it as a fixture
+    # because it would create a second session. Instead, start MW here.
+    from phosphene.imi.clients.mediawiki import MWConfig, UrllibMWClient
 
-@pytest.fixture
-def sf_consumer_secret() -> str:
-    """Salesforce OAuth consumer secret."""
-    return _env_or_skip("SF_CONSUMER_SECRET")
+    _compose_up("db", "elasticsearch", "web")
+    _wait_for_http("http://localhost:8085/")
 
+    subprocess.run(
+        [
+            "docker",
+            "exec",
+            "imi-pipeline-web-1",
+            "bash",
+            "/init/00-create-test-admin.sh",
+        ],
+        check=True,
+    )
+    subprocess.run(
+        ["docker", "exec", "imi-pipeline-web-1", "bash", "/init/01-seed-test-pages.sh"],
+        check=True,
+    )
 
-@pytest.fixture
-def wp_username() -> str:
-    """WordPress application username."""
-    return _env_or_skip("WP_USERNAME")
+    config = MWConfig(
+        base_url="http://localhost:8085",
+        username="TestBot",
+        password="testpass",
+    )
+    client = UrllibMWClient(config)
+    client.login()
+    client.get_csrf_token()
 
+    yield (temporal_endpoint, client)
 
-@pytest.fixture
-def wp_app_password() -> str:
-    """WordPress application password."""
-    return _env_or_skip("WP_APP_PASSWORD")
-
-
-@pytest.fixture
-def mw_bot_username() -> str:
-    """MediaWiki bot username."""
-    return _env_or_skip("MW_BOT_USERNAME")
-
-
-@pytest.fixture
-def mw_bot_password() -> str:
-    """MediaWiki bot password."""
-    return _env_or_skip("MW_BOT_PASSWORD")
+    _compose_down("db", "elasticsearch", "web")

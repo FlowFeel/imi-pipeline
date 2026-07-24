@@ -1,32 +1,27 @@
 """Unit test configuration.
 
-Tests requiring the Temporal test server binary are expected to fail in CI
-where the server download is unavailable (temporalio SDK version mismatch
-with temporal.download). They pass locally when the Temporal dev server
-is running.
+With the Temporal testcontainer (docker-compose.test.yml), workflow
+tests run against a real Temporal server instead of downloading a
+binary that 404s in CI. The auto-xfail is removed.
 
-Pardot activity tests need an event loop; marked xfail when asyncio
-context is unavailable.
+Tests that need Temporal use the `temporal_endpoint` fixture which
+starts the container. Tests that don't need it run as pure unit tests.
 """
+
+import asyncio
 
 import pytest
 
+COMPOSE_PATH = None  # Set by tests that need it
 
-def pytest_collection_modifyitems(items):
-    """Auto-mark tests that need the Temporal test server."""
-    temporal_modules = {
-        "test_workflow",
-        "test_workflow_v3",
-        "test_e2e_simulation",
-        "test_pardot_activity",
-        "test_author_parsing_integration",  # Draft validation vs parser ordering
-    }
+
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    """Add asyncio markers to async tests if missing.
+
+    With asyncio_mode=auto, pytest-asyncio should handle this,
+    but some versions need explicit markers.
+    """
     for item in items:
-        module_name = item.module.__name__.rsplit(".", 1)[-1]
-        if module_name in temporal_modules:
-            item.add_marker(
-                pytest.mark.xfail(
-                    reason="Temporal test server unavailable in CI",
-                    strict=False,
-                )
-            )
+        if asyncio.iscoroutinefunction(getattr(item, "function", None)):
+            if not any(m.name == "asyncio" for m in item.iter_markers()):
+                item.add_marker(pytest.mark.asyncio)

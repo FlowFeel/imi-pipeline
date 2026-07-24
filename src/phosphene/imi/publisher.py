@@ -1,12 +1,16 @@
-"""ObservatoryPublisher — creates/edits wiki pages on observatory.wiki.
+"""ObservatoryPublisher — DEPRECATED.
 
-The publisher is the adapter between the Draft model and the
-MediaWiki action API. It authenticates via bot password, obtains
-a CSRF token, and uses action=edit to create or update articles.
+This module is deprecated. It duplicates ``UrllibMWClient`` — same
+login flow, same CSRF acquisition, same edit API. The only unique
+feature is dry-run mode, which is better handled by injecting a
+``FakeMWClient`` into ``ObservatoryOutlet``.
 
-Dry-run mode is available for BDD testing without a live API.
+Migration path:
+    - BDD steps: use ``ObservatoryOutlet`` with ``FakeMWClient``
+    - URL derivation: use ``UrllibMWClient.page_url()``
+    - Dry-run: use ``FakeMWClient`` (returns deterministic URLs)
 
-OKR: @okr_publish_pipeline
+This module will be removed once BDD steps are migrated.
 """
 
 from __future__ import annotations
@@ -27,19 +31,9 @@ class PublishError(Exception):
 
 
 class ObservatoryPublisher:
-    """Publishes Draft articles to observatory.wiki via the MW action API.
+    """DEPRECATED — use ObservatoryOutlet + UrllibMWClient instead.
 
-    The publish flow:
-      1. Login with bot credentials (action=login)
-      2. Obtain CSRF edit token (action=query&meta=tokens)
-      3. Create or edit the wiki page (action=edit)
-      4. Return the canonical URL
-
-    Attributes:
-        api_url: The MediaWiki API endpoint (e.g. https://observatory.wiki/w/api.php).
-        username: Bot username for MW login.
-        password: Bot password for MW login.
-        dry_run: If True, skip all API calls and return the expected URL.
+    Kept only for BDD step compatibility during migration.
     """
 
     def __init__(
@@ -50,14 +44,6 @@ class ObservatoryPublisher:
         *,
         dry_run: bool = False,
     ) -> None:
-        """Initialise with MW API URL and bot credentials.
-
-        Args:
-            api_url: Full URL to the MW api.php endpoint.
-            username: Bot login username.
-            password: Bot login password.
-            dry_run: If True, construct the URL without hitting the API.
-        """
         self.api_url = api_url.rstrip("/")
         self.username = username
         self.password = password
@@ -70,18 +56,7 @@ class ObservatoryPublisher:
 
     @staticmethod
     def _derive_wiki_base(api_url: str) -> str:
-        """Derive the wiki page base URL from the API URL.
-
-        Strips the ``/w/api.php`` (or ``/api.php``) suffix and appends
-        ``/wiki/``. For example:
-            ``https://observatory.wiki/w/api.php`` → ``https://observatory.wiki/wiki/``
-
-        Args:
-            api_url: Full URL to the MW api.php endpoint.
-
-        Returns:
-            Base URL for wiki page links, with trailing slash.
-        """
+        """Derive the wiki page base URL from the API URL."""
         base = api_url
         for suffix in ("/w/api.php", "/api.php"):
             if base.endswith(suffix):
@@ -90,21 +65,7 @@ class ObservatoryPublisher:
         return f"{base}/wiki/"
 
     def publish(self, draft: Draft) -> str:
-        """Create or edit a wiki page for the given draft.
-
-        If the page already exists, it is updated (idempotent).
-        In dry_run mode, no API call is made — the URL is constructed
-        from the title and returned directly.
-
-        Args:
-            draft: The finished article draft to publish.
-
-        Returns:
-            The canonical URL of the published article on observatory.wiki.
-
-        Raises:
-            PublishError: If the MW API returns an error.
-        """
+        """Create or edit a wiki page for the given draft."""
         title_with_underscores = draft.title.replace(" ", "_")
         canonical_url = f"{self._wiki_base_url}{title_with_underscores}"
 
@@ -120,22 +81,10 @@ class ObservatoryPublisher:
             token=csrf_token,
             summary=f"Published by Flow: {draft.title}",
         )
-
         logger.info("Published '%s' → %s", draft.title, canonical_url)
         return canonical_url
 
     def _api_post(self, params: dict[str, str]) -> dict:
-        """POST to the MW API and return parsed JSON.
-
-        Args:
-            params: Form-encoded parameters for the API call.
-
-        Returns:
-            Parsed JSON response as a dict.
-
-        Raises:
-            PublishError: If the request fails or returns non-JSON.
-        """
         data = urllib.parse.urlencode(params).encode("utf-8")
         req = urllib.request.Request(
             self.api_url,
@@ -150,17 +99,6 @@ class ObservatoryPublisher:
             raise PublishError(f"MW API request failed: {exc}") from exc
 
     def _api_get(self, params: dict[str, str]) -> dict:
-        """GET from the MW API and return parsed JSON.
-
-        Args:
-            params: Query-string parameters for the API call.
-
-        Returns:
-            Parsed JSON response as a dict.
-
-        Raises:
-            PublishError: If the request fails or returns non-JSON.
-        """
         qs = urllib.parse.urlencode({**params, "format": "json"})
         url = f"{self.api_url}?{qs}"
         req = urllib.request.Request(
@@ -175,14 +113,6 @@ class ObservatoryPublisher:
             raise PublishError(f"MW API request failed: {exc}") from exc
 
     def _login(self) -> None:
-        """Authenticate with the MW API using bot credentials.
-
-        Two-step login: first GET a login token, then POST with credentials.
-
-        Raises:
-            PublishError: If login fails.
-        """
-        # Step 1: Get login token
         token_resp = self._api_get(
             {
                 "action": "query",
@@ -193,8 +123,6 @@ class ObservatoryPublisher:
         login_token = token_resp.get("query", {}).get("tokens", {}).get("logintoken")
         if not login_token:
             raise PublishError(f"No login token in response: {token_resp}")
-
-        # Step 2: POST login
         login_resp = self._api_post(
             {
                 "action": "login",
@@ -209,19 +137,8 @@ class ObservatoryPublisher:
             raise PublishError(
                 f"MW login failed: {login_resp.get('login', {}).get('reason', result)}"
             )
-        logger.debug("Logged in as %s", self.username)
 
     def _get_csrf_token(self) -> str:
-        """Obtain a CSRF edit token from the MW API.
-
-        Must be called after _login() — the session cookies carry auth.
-
-        Returns:
-            The CSRF token string.
-
-        Raises:
-            PublishError: If the token cannot be obtained.
-        """
         resp = self._api_get(
             {
                 "action": "query",
@@ -241,20 +158,6 @@ class ObservatoryPublisher:
         token: str,
         summary: str,
     ) -> None:
-        """Create or edit a wiki page.
-
-        Uses action=edit which is idempotent: if the page exists it is
-        updated; if it does not exist it is created.
-
-        Args:
-            title: Page title.
-            text: Full page content (wikitext).
-            token: CSRF edit token.
-            summary: Edit summary.
-
-        Raises:
-            PublishError: If the edit API returns an error.
-        """
         resp = self._api_post(
             {
                 "action": "edit",
@@ -272,8 +175,3 @@ class ObservatoryPublisher:
             raise PublishError(
                 f"MW edit failed for '{title}': {error.get('info', edit_result)}"
             )
-        logger.debug(
-            "Page '%s' %s",
-            title,
-            "created" if edit_result.get("new") else "updated",
-        )

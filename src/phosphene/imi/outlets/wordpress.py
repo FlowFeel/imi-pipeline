@@ -1,21 +1,16 @@
 """WordPressOutlet — creates an imi_registry entry on the IMI WordPress site.
 
-Accepts a WPClientProtocol at construction. Creates an imi_registry
-post from the PublicationEvent and returns an OutletResult with the
-entry URL.
+The outlet is decomposed into three separable concerns:
 
-Idempotency is enforced at the outlet level, not the caller's. The
-caller should never need to check whether a post already exists before
-calling ``publish()`` — that check is the outlet's responsibility.
-Pushing idempotency up to the caller creates a TOCTOU race (check,
-then create) and distributes dedup logic across every callsite.
-Keeping it inside the outlet makes the guarantee structural.
+1. **Payload construction** — pure logic. ``WordPressPostFormatter``
+   transforms a Draft into a WordPress post payload. No I/O.
+2. **Idempotency decision** — pure logic. Given whether a post exists,
+   decide whether to create or return the existing URL. No I/O.
+3. **I/O execution** — the client protocol handles all HTTP.
 
 Slug-based dedup, not title-based: WordPress URLs are slug-stable,
-titles are display-mutable. Two posts can share a title; no two
-posts share a slug within a CPT. The slug is the identity key for
-the Scholar Registry — it determines the canonical URL that other
-systems (Salesforce, Observatory) link to.
+titles are display-mutable. The slug is the identity key for the
+Scholar Registry.
 
 OKR: @okr_publish_pipeline
 """
@@ -23,6 +18,7 @@ OKR: @okr_publish_pipeline
 from __future__ import annotations
 
 from phosphene.imi.event import OutletResult, PublicationEvent
+from phosphene.imi.formatters import WordPressPostFormatter
 from phosphene.imi.outlets.base import PublicationOutlet
 from phosphene.imi.protocols import WPClientProtocol
 
@@ -30,25 +26,29 @@ from phosphene.imi.protocols import WPClientProtocol
 class WordPressOutlet(PublicationOutlet):
     """Creates an IMI Scholar Registry entry on independentmediainstitute.org.
 
-    Idempotency lives here because the outlet owns the write. The caller
-    says "publish this" and gets back a result — never "check first, then
-    publish." If the entry already exists, the outlet returns the existing
-    URL with ``metadata={"idempotent": "true"}`` so the saga knows no
-    compensation is needed for this step.
-
     Attributes:
         _client: A WPClientProtocol implementation.
         _post_type: The WordPress CPT slug (default: imi_registry).
+        _formatter: Maps a Draft to a WordPress post payload.
     """
 
     def __init__(
         self,
         client: WPClientProtocol,
         post_type: str = "imi_registry",
+        formatter: WordPressPostFormatter | None = None,
     ) -> None:
-        """Initialise with an injectable WP client."""
+        """Initialise with an injectable WP client and optional formatter.
+
+        Args:
+            client: Any object satisfying WPClientProtocol.
+            post_type: WordPress CPT slug.
+            formatter: Post payload formatter. Defaults to
+                WordPressPostFormatter. Inject a custom one for testing.
+        """
         self._client = client
         self._post_type = post_type
+        self._formatter = formatter or WordPressPostFormatter()
 
     @property
     def name(self) -> str:
@@ -58,16 +58,11 @@ class WordPressOutlet(PublicationOutlet):
     def publish(self, event: PublicationEvent) -> OutletResult:
         """Create an imi_registry entry for this publication event.
 
-        If an entry with this slug already exists, returns existing URL.
+        Wires: format → idempotency check → I/O.
         Never raises — all errors captured in OutletResult.error.
 
         Uses ``draft.slug`` — the canonical slug computed by the Draft
-        model — instead of a local slugify. Draft.slug strips non-ASCII
-        characters (em-dashes, curly quotes, accents) via regex, matching
-        WordPress's ``sanitize_title_with_dashes()`` behavior. A local
-        slugify that preserves non-ASCII would create TOCTOU mismatches:
-        the outlet sends ``café-culture`` but WP stores ``caf-culture``,
-        breaking idempotency on second publish.
+        model — matching WordPress's ``sanitize_title_with_dashes()``.
 
         Args:
             event: The publication event carrying the draft.
@@ -78,27 +73,18 @@ class WordPressOutlet(PublicationOutlet):
         draft = event.draft
         slug = draft.slug
         try:
+            # Concern 1: I/O — check existence
             if self._client.post_exists(self._post_type, slug):
-                url = self._client.post_url(self._post_type, slug)
-                return OutletResult(
-                    outlet=self.name,
-                    succeeded=True,
-                    artifact=url,
-                    metadata={"idempotent": "true"},
-                )
+                # Concern 2: Idempotency decision — pure
+                return self._idempotent_result(self._post_type, slug)
 
+            # Concern 3: Payload construction — pure
+            payload = self._formatter.format_payload(draft)
+
+            # Concern 4: I/O — create post
             post = self._client.create_post(
                 post_type=self._post_type,
-                data={
-                    "title": draft.title,
-                    "slug": slug,
-                    "status": "publish",
-                    "meta": {
-                        "author_name": draft.author,
-                        "category": draft.category,
-                        "source_url": draft.source_url or "",
-                    },
-                },
+                data=payload,
             )
             url = post.get("url", self._client.post_url(self._post_type, slug))
             return OutletResult(
@@ -113,12 +99,22 @@ class WordPressOutlet(PublicationOutlet):
                 error=str(exc),
             )
 
-    @staticmethod
-    def _slugify(title: str) -> str:
-        """Convert a title to a URL-safe slug.
+    def _idempotent_result(self, post_type: str, slug: str) -> OutletResult:
+        """Construct an idempotent-skip result.
 
-        .. deprecated::
-            Retained for backward compatibility. New code should use
-            ``Draft.slug`` which handles non-ASCII correctly via regex.
+        Pure: given that a post exists, build the result.
+
+        Args:
+            post_type: The WordPress CPT slug.
+            slug: The post slug that already exists.
+
+        Returns:
+            OutletResult marking the publish as idempotent.
         """
-        return title.lower().replace(" ", "-")[:80]
+        url = self._client.post_url(post_type, slug)
+        return OutletResult(
+            outlet=self.name,
+            succeeded=True,
+            artifact=url,
+            metadata={"idempotent": "true"},
+        )
