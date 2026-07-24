@@ -10,7 +10,6 @@ environment.py before_all. Each step reads/writes context attributes.
 
 OKR: @okr_publish_pipeline
 """
-
 from __future__ import annotations
 
 import json
@@ -28,9 +27,9 @@ from behave import given, then, when
 # sys.path patching — allow direct imports from integration test directory
 # ---------------------------------------------------------------------------
 
-_repo_root = Path(__file__).resolve().parent.parent.parent  # imi-pipeline/
+_repo_root = Path(__file__).resolve().parent.parent.parent
 _src_dir = _repo_root / "src"
-_integration_dir = _repo_root / "tests" / "integration"
+_integration_dir = _repo_root.parent / "tests" / "integration"
 
 for _p in [str(_src_dir), str(_integration_dir)]:
     if _p not in sys.path:
@@ -67,7 +66,9 @@ def _start_mock(create_app_fn) -> tuple[Any, int]:
     deadline = time.monotonic() + 5
     while time.monotonic() < deadline:
         try:
-            urllib.request.urlopen(f"http://127.0.0.1:{port}/last-request", timeout=1)
+            urllib.request.urlopen(
+                f"http://127.0.0.1:{port}/last-request", timeout=1
+            )
             break
         except Exception:
             time.sleep(0.05)
@@ -596,7 +597,8 @@ def step_page_title_draft_namespace(context: object) -> None:
     assert edit_req is not None, "No last edit request captured — check mock server"
     title = edit_req.get("title", "")
     assert title.startswith("Draft:"), (
-        f"Page title {title!r} must start with 'Draft:' — namespace enforcement failed"
+        f"Page title {title!r} must start with 'Draft:' — "
+        "namespace enforcement failed"
     )
 
 

@@ -4,70 +4,36 @@ build-backend = "hatchling.build"
 
 [project]
 name = "phosphene-imi"
-version = "0.2.0"
-description = "IMI Syndication Pipeline — contractual media syndication via Temporal."
-requires-python = ">=3.12"
-license = "MIT"
-readme = "README.md"
-
+version = "0.1.0"
+description = "IMI publish and distribute pipeline — phosphene-imi."
+requires-python = ">=3.11"
 dependencies = [
     "pydantic>=2.0",
+    "behave>=1.2",
     "temporalio>=1.6",
     "mwclient>=0.11.0",
     "phosphene-temporal",
 ]
 
 [project.optional-dependencies]
-bdd = ["behave>=1.2"]
-api = ["fastapi>=0.110", "uvicorn>=0.29"]
 dev = [
     "pytest>=9.0",
     "pytest-asyncio>=0.23",
-    "behave>=1.2",
     "flask>=3.0",
     "ruff>=0.4",
 ]
 
-[project.scripts]
-imi-worker = "phosphene.imi.worker:main"
-imi-gate = "phosphene.imi.gate_cli:main"
-
 [tool.hatch.build.targets.wheel]
 packages = ["src/phosphene"]
 
-[tool.uv.workspace]
-members = ["lib/temporal"]
-
-[tool.uv.sources]
-phosphene-temporal = { workspace = true }
-
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["tests/unit", "tests/integration"]
+testpaths = ["tests"]
 markers = [
-    "live: tests requiring real external services (skip in CI)",
-    "temporal_server: tests requiring Temporal test server binary",
-]
-filterwarnings = [
-    "ignore::RuntimeWarning",
+    "integration: requires Docker or live services — skip with -m 'not integration'",
 ]
 
 [tool.ruff]
 line-length = 88
 target-version = "py312"
-
-[tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
-ignore = [
-    "RUF059",  # unused-unpacked-variable (behave steps)
-    "RUF015",  # unnecessary-iterable-allocation
-    "RUF005",  # collection-literal-concatenation
-    "B017",    # assert-raises-exception (test patterns)
-    "B007",    # unused-loop-control-variable
-    "SIM102",  # collapsible-if
-    "SIM105",  # suppressible-exception
-    "SIM118",  # in-dict-keys
-    "SIM117",  # multiple-with-statements
-    "F841",    # unused-variable (some test patterns)
-    "E501",    # line-too-long (docstrings, URLs — format handles wrappable)
-]
+select = ["E", "F", "I", "UP", "B", "SIM", "ANN", "RUF"]

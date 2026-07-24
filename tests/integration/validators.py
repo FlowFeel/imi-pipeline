@@ -175,7 +175,9 @@ class KellyContractValidators:
         assert cls.author_is_person(jsonld), (
             f"author.@type must be 'Person', got: {jsonld.get('author', {}).get('@type')!r}"
         )
-        assert cls.dates_are_z_form(jsonld), "One or more date fields are not in Z form"
+        assert cls.dates_are_z_form(jsonld), (
+            "One or more date fields are not in Z form"
+        )
         assert cls.schema_type_is_valid(jsonld), (
             f"@type is not in valid set {_VALID_SCHEMA_TYPES}, got: {jsonld.get('@type')!r}"
         )
