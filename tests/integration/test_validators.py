@@ -12,9 +12,7 @@ OKR: @okr_publish_pipeline
 
 from __future__ import annotations
 
-import pytest
 from validators import KellyContractValidators
-
 
 # ---------------------------------------------------------------------------
 # Shared good payload (golden output A shape)

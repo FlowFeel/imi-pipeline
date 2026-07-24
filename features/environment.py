@@ -5,6 +5,7 @@ Clears state before each scenario for isolation.
 
 OKR: @okr_publish_pipeline
 """
+
 from __future__ import annotations
 
 import sys
@@ -19,7 +20,7 @@ def before_all(context: object) -> None:
     context.repo_root = Path(__file__).resolve().parent.parent.parent.parent.parent  # type: ignore[attr-defined]
 
 
-def before_scenario(context: object, scenario: object) -> None:  # noqa: ARG001
+def before_scenario(context: object, scenario: object) -> None:
     """Isolate state between scenarios."""
     context.draft = None  # type: ignore[attr-defined]
     context.published_article = None  # type: ignore[attr-defined]

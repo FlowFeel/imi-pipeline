@@ -252,7 +252,9 @@ class TestWordPressFormatterContract:
         assert payload["meta"]["author_name"] != ""
         assert payload["meta"]["category"] != ""
 
-    def test_outlet_and_formatter_produce_same_slug(self, wp_mock_server: tuple[Any, int]) -> None:
+    def test_outlet_and_formatter_produce_same_slug(
+        self, wp_mock_server: tuple[Any, int]
+    ) -> None:
         """The outlet's slug and the formatter's slug agree for the same draft."""
         from phosphene.imi.event import PublicationEvent
         from phosphene.imi.formatters import WordPressPostFormatter
