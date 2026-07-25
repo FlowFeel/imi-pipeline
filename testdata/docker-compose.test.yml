@@ -56,6 +56,13 @@ services:
       discovery.type: single-node
       ES_JAVA_OPTS: "-Xms256m -Xmx256m"
       xpack.security.enabled: "false"
+      bootstrap.memory_lock: "false"
+      "bootstrap.system_call_filter": "false"
+      "cluster.routing.allocation.disk.threshold_enabled": "false"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9200"]
       interval: 5s
