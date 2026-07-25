@@ -167,9 +167,7 @@ class SyndicationActivities:
         """
         try:
             outlet_results = (
-                request.get("outlet_results", {})
-                if isinstance(request, dict)
-                else {}
+                request.get("outlet_results", {}) if isinstance(request, dict) else {}
             )
 
             # Build result dict from succeeded outlets
@@ -185,9 +183,7 @@ class SyndicationActivities:
                 result["source_url"] = meta.get("source_url", "")
 
             outcomes = self._pardot_client.send_pipeline_notification(result)
-            sent = sum(
-                1 for o in outcomes if getattr(o, "succeeded", False)
-            )
+            sent = sum(1 for o in outcomes if getattr(o, "succeeded", False))
             return f"pardot-sent:{sent}/{len(outcomes)}"
         except Exception as exc:
             return f"pardot-error:{exc}"
