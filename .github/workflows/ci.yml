@@ -113,8 +113,8 @@ jobs:
 
       - name: Run MW init scripts
         run: |
-          docker exec imi-pipeline-web-1 bash /init/00-create-test-admin.sh
-          docker exec imi-pipeline-web-1 bash /init/01-seed-test-pages.sh
+          docker exec testdata-web-1 bash /init/00-create-test-admin.sh
+          docker exec testdata-web-1 bash /init/01-seed-test-pages.sh
 
       - name: Run all tests (Temporal + MW)
         run: |
