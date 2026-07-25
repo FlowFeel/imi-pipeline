@@ -338,7 +338,7 @@ class _MockMWClient:
         safe = self._safe_title(title)
         r = self._get(action="query", titles=safe)
         pages = r.get("query", {}).get("pages", {})
-        return list(pages.keys())[0] != "-1"
+        return next(iter(pages.keys())) != "-1"
 
     def page_url(self, title: str) -> str:
         """Construct a URL for the page.
@@ -473,7 +473,7 @@ def step_sf_publish(context: object) -> None:
     from phosphene.imi.event import PublicationEvent
     from phosphene.imi.outlets.salesforce import SalesforceOutlet
 
-    app, port = _get_sf_mock()
+    _app, port = _get_sf_mock()
     client = _MockSFClient(f"http://127.0.0.1:{port}")
     outlet = SalesforceOutlet(client=client)
     event = PublicationEvent(draft=context.draft, publisher_id="bdd-test")  # type: ignore[attr-defined]
@@ -495,7 +495,7 @@ def step_wp_publish(context: object) -> None:
     from phosphene.imi.event import PublicationEvent
     from phosphene.imi.outlets.wordpress import WordPressOutlet
 
-    app, port = _get_wp_mock()
+    _app, port = _get_wp_mock()
     client = _MockWPClient(f"http://127.0.0.1:{port}")
     outlet = WordPressOutlet(client=client)
     event = PublicationEvent(draft=context.draft, publisher_id="bdd-test")  # type: ignore[attr-defined]
@@ -517,7 +517,7 @@ def step_mw_publish(context: object) -> None:
     from phosphene.imi.event import PublicationEvent
     from phosphene.imi.outlets.observatory import ObservatoryOutlet
 
-    app, port = _get_mw_mock()
+    _app, port = _get_mw_mock()
     client = _MockMWClient(f"http://127.0.0.1:{port}")
     outlet = ObservatoryOutlet(client=client)
     event = PublicationEvent(draft=context.draft, publisher_id="bdd-test")  # type: ignore[attr-defined]
