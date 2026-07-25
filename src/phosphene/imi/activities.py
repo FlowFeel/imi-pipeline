@@ -148,20 +148,49 @@ class SyndicationActivities:
 
     @activity.defn
     async def send_pardot_email(self, request: Any) -> str:
-        """Send Pardot email for the article. Stub returns "pardot-skipped".
+        """Send Pardot pipeline notification for the syndicated article.
 
-        Pardot email sending is not yet implemented.  This stub allows
-        the saga to include Pardot in the outlet registry without wiring
-        a real Pardot client.  The compensation is ``noop_compensation``
-        because sent emails cannot be unsent.
+        Extracts outlet artifact URLs from ``outlet_results`` in the request,
+        builds a result dict from succeeded outlets, and delegates to the
+        injected Pardot client. Falls back to ``title`` / ``source_url``
+        metadata when no outlet results are available.
+
+        Never propagates exceptions — they are captured and returned as
+        ``pardot-error:<exception>`` strings so the saga can continue.
 
         Args:
             request: SyndicationRequest dict from Temporal.
 
         Returns:
-            "pardot-skipped" until a real Pardot client is available.
+            "pardot-sent:<sent>/<total>" on success, or
+            "pardot-error:<exception>" on failure.
         """
-        return "pardot-skipped"
+        try:
+            outlet_results = (
+                request.get("outlet_results", {})
+                if isinstance(request, dict)
+                else {}
+            )
+
+            # Build result dict from succeeded outlets
+            result: dict[str, str] = {}
+            for outlet_name, outlet_data in outlet_results.items():
+                if isinstance(outlet_data, dict) and outlet_data.get("succeeded"):
+                    result[outlet_name] = outlet_data.get("artifact", "")
+
+            # Fall back to metadata when no succeeded outlet results
+            if not result:
+                meta = request if isinstance(request, dict) else {}
+                result["title"] = meta.get("title", "")
+                result["source_url"] = meta.get("source_url", "")
+
+            outcomes = self._pardot_client.send_pipeline_notification(result)
+            sent = sum(
+                1 for o in outcomes if getattr(o, "succeeded", False)
+            )
+            return f"pardot-sent:{sent}/{len(outcomes)}"
+        except Exception as exc:
+            return f"pardot-error:{exc}"
 
     # ------------------------------------------------------------------
     # Compensation activities (rollback)
@@ -231,6 +260,8 @@ class SyndicationActivities:
         from phosphene.imi.draft import Draft
 
         if isinstance(request, dict):
+            from phosphene.imi.parser import WikitextParser
+
             publisher_id = request.get("publisher_id", "flow") or "flow"
             # Extract Draft-compatible fields, dropping SyndicationRequest-only keys
             draft_keys = {
@@ -245,9 +276,33 @@ class SyndicationActivities:
             draft_data: dict[str, Any] = {
                 k: v for k, v in request.items() if k in draft_keys and v is not None
             }
-            # Provide mandatory Draft fields if missing
+
+            # --- Phase 1: Parse wikitext for author/category if needed ---
+            body = draft_data.get("body", "")
+            body_format = request.get("body_format", "wikitext")
+            should_parse = body_format == "wikitext" and bool(body)
+
+            author = draft_data.get("author", "")
+            if not author and should_parse:
+                parsed_author = WikitextParser.extract_author(body)
+                if parsed_author:
+                    draft_data["author"] = parsed_author
+
+            category = draft_data.get("category", "")
+            if not category and should_parse:
+                parsed_category = WikitextParser.extract_category(body)
+                if parsed_category:
+                    draft_data["category"] = parsed_category
+
+            # --- Phase 2: Strip empty strings so setdefault can apply defaults ---
+            if not draft_data.get("author", ""):
+                draft_data.pop("author", None)
+            if not draft_data.get("category", ""):
+                draft_data.pop("category", None)
             draft_data.setdefault("author", "Observatory")
             draft_data.setdefault("category", "General")
+
+            # --- Phase 3: Construct Draft with resolved values ---
             return Draft(**draft_data), publisher_id
 
         if isinstance(request, Draft):

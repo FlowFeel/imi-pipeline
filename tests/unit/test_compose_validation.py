@@ -38,19 +38,19 @@ ALPINE_IMAGES = {
 BASHISMS = [
     "/dev/tcp/",
     "/dev/udp/",
-    "[[",  # bash test
+    "[[",       # bash test
     "shopt",
     "declare -",
     "readarray",
     "mapfile",
-    "${!",  # indirect expansion
-    "<<<",  # here-string
+    "${!",       # indirect expansion
+    "<<<",       # here-string
 ]
 
 # Tools NOT available in standard alpine
 ALPINE_MISSING_TOOLS = [
-    "curl",  # use wget instead
-    "bash",  # use sh
+    "curl",      # use wget instead
+    "bash",      # use sh
     "grpc_health_probe",  # not bundled
 ]
 
@@ -228,7 +228,12 @@ class TestTemporalConfig:
         """Temporal service depends on its database."""
         temporal = services.get("temporal", {})
         deps = temporal.get("depends_on", {})
-        assert deps, "Temporal has no depends_on — will start before DB is ready"
+        # deps can be a list (plain dependency) or dict (with conditions)
+        if isinstance(deps, list):
+            assert "postgres" in deps, "Temporal does not depend on postgres"
+        else:
+            assert deps, "Temporal has no depends_on — will start before DB is ready"
+            assert "postgres" in deps, "Temporal does not depend on postgres"
 
     def test_workers_depend_on_temporal(self, services):
         """Worker and API depend on Temporal."""
@@ -237,7 +242,15 @@ class TestTemporalConfig:
             if not svc:
                 continue
             deps = svc.get("depends_on", {})
-            assert "temporal" in deps, f"Service '{name}' does not depend on temporal"
+            # deps can be a list or dict
+            if isinstance(deps, list):
+                assert "temporal" in deps, (
+                    f"Service '{name}' does not depend on temporal"
+                )
+            else:
+                assert "temporal" in deps, (
+                    f"Service '{name}' does not depend on temporal"
+                )
 
 
 class TestDependencyChain:
@@ -247,6 +260,9 @@ class TestDependencyChain:
         """If a service depends on X with service_healthy, X must have a healthcheck."""
         for name, svc in services.items():
             deps = svc.get("depends_on", {})
+            # deps can be a list (plain) or dict (with conditions)
+            if isinstance(deps, list):
+                continue  # plain list = no conditions, no healthcheck required
             for dep_name, dep_config in deps.items():
                 if isinstance(dep_config, dict):
                     condition = dep_config.get("condition", "")
