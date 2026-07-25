@@ -52,6 +52,8 @@ services:
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:7.17.0
+    security_opt:
+      - seccomp:unconfined
     environment:
       discovery.type: single-node
       ES_JAVA_OPTS: "-Xms256m -Xmx256m"
