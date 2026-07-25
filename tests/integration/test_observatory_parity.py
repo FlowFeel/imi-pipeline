@@ -90,7 +90,7 @@ class TestMWEditContract:
     fixture for cleanup, but each assertion is independent.
     """
 
-    def test_edit_creates_page(self, mw_client):
+    def test_edit_creates_page(self, mw_client) -> None:
         """The MW API accepts an edit and creates a page.
 
         Proves: DB write, CSRF token flow, session auth, MW boot.
@@ -109,7 +109,7 @@ class TestMWEditContract:
         # Cleanup
         mw_client.delete_page(title, reason="Integration test cleanup")
 
-    def test_page_exists_after_edit(self, mw_client):
+    def test_page_exists_after_edit(self, mw_client) -> None:
         """A page created via edit is visible via page_exists.
 
         Proves: DB read consistency — what was written is readable.
@@ -127,7 +127,7 @@ class TestMWEditContract:
         # Cleanup
         mw_client.delete_page(title, reason="Integration test cleanup")
 
-    def test_delete_removes_page(self, mw_client):
+    def test_delete_removes_page(self, mw_client) -> None:
         """The delete compensation works against real MW.
 
         Proves: the protocol's delete_page method actually deletes.
@@ -154,7 +154,7 @@ class TestImageServingContract:
     Apache served from /var/www/mediawiki/w/images.
     """
 
-    def test_image_file_accessible_via_http(self):
+    def test_image_file_accessible_via_http(self) -> None:
         """A file in the images volume is accessible via HTTP.
 
         Proves: volume mount path + Apache document root alignment.
@@ -179,7 +179,7 @@ class TestSearchContract:
     Proves: Elasticsearch + MW CirrusSearch integration composes.
     """
 
-    def test_search_returns_results(self, mw_client):
+    def test_search_returns_results(self, mw_client) -> None:
         """Search for a known term returns results.
 
         Note: search indexing is async — this test may need to wait
@@ -216,7 +216,7 @@ class TestOutletComposition:
     I/O delegation) actually work when wired together with a real client.
     """
 
-    def test_observatory_outlet_publishes_to_real_mw(self, mw_client):
+    def test_observatory_outlet_publishes_to_real_mw(self, mw_client) -> None:
         """ObservatoryOutlet + UrllibMWClient creates a page on real MW.
 
         Proves: formatter → outlet → client → MW API all compose.
@@ -246,7 +246,7 @@ class TestOutletComposition:
         # Cleanup
         mw_client.delete_page(title, reason="Integration test cleanup")
 
-    def test_observatory_outlet_idempotent_on_real_mw(self, mw_client):
+    def test_observatory_outlet_idempotent_on_real_mw(self, mw_client) -> None:
         """Publishing twice to real MW returns idempotent result.
 
         Proves: idempotency logic composes with real page_exists check.

@@ -12,6 +12,8 @@ OKR: @okr_publish_pipeline
 
 from __future__ import annotations
 
+from typing import Never
+
 from phosphene.imi.draft import Draft
 from phosphene.imi.event import PublicationEvent
 from phosphene.imi.outlets.observatory import ObservatoryOutlet
@@ -31,45 +33,45 @@ class GarbageMWClient:
     def create_page(self, **kw):
         return {"error": "DB locked"}
 
-    def page_exists(self, title):
+    def page_exists(self, title) -> bool:
         return False
 
-    def page_url(self, title):
+    def page_url(self, title) -> str:
         return ""
 
-    def delete_page(self, title, reason=""):
+    def delete_page(self, title, reason="") -> None:
         pass
 
 
 class RaisingMWClient:
     """Raises on every call."""
 
-    def create_page(self, **kw):
+    def create_page(self, **kw) -> Never:
         raise ConnectionError("Network down")
 
-    def page_exists(self, title):
+    def page_exists(self, title) -> Never:
         raise ConnectionError("Network down")
 
-    def page_url(self, title):
+    def page_url(self, title) -> Never:
         raise ConnectionError("Network down")
 
-    def delete_page(self, title, reason=""):
+    def delete_page(self, title, reason="") -> Never:
         raise ConnectionError("Network down")
 
 
 class GarbageWPClient:
     """Returns non-dict and missing-field responses."""
 
-    def create_post(self, post_type, data):
+    def create_post(self, post_type, data) -> str:
         return "not a dict"
 
-    def post_exists(self, post_type, slug):
+    def post_exists(self, post_type, slug) -> bool:
         return False
 
-    def post_url(self, post_type, slug):
+    def post_url(self, post_type, slug) -> str:
         return ""
 
-    def delete_post(self, post_url):
+    def delete_post(self, post_url) -> None:
         pass
 
 
@@ -79,10 +81,10 @@ class GarbageSFClient:
     def create_record(self, object_type, data):
         return {"error": "SF down"}
 
-    def record_exists(self, object_type, field, value):
+    def record_exists(self, object_type, field, value) -> bool:
         return False
 
-    def delete_record(self, object_type, record_id):
+    def delete_record(self, object_type, record_id) -> None:
         pass
 
 
@@ -133,10 +135,10 @@ class TestContractViolations:
             def create_record(self, object_type, data):
                 return {"status": "ok"}
 
-            def record_exists(self, object_type, field, value):
+            def record_exists(self, object_type, field, value) -> bool:
                 return False
 
-            def delete_record(self, object_type, record_id):
+            def delete_record(self, object_type, record_id) -> None:
                 pass
 
         outlet = SalesforceOutlet(client=NoIdSFClient())

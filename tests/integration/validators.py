@@ -118,9 +118,8 @@ class KellyContractValidators:
         """
         for field_name in _DATE_FIELDS:
             value = jsonld.get(field_name)
-            if value is not None:
-                if not str(value).endswith("Z"):
-                    return False
+            if value is not None and not str(value).endswith("Z"):
+                return False
         return True
 
     @staticmethod

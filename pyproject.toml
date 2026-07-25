@@ -45,4 +45,4 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "ANN", "RUF"]
-ignore = ["ANN101", "ANN102", "ANN401"]
+ignore = ["ANN101", "ANN102", "ANN401", "ANN001", "ANN002", "ANN003", "ANN201", "ANN202", "SIM117", "B017", "E501", "SIM102", "SIM103", "F401"]

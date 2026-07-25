@@ -101,7 +101,7 @@ class TestSalesforcePayload:
         from phosphene.imi.event import PublicationEvent
         from phosphene.imi.outlets.salesforce import SalesforceOutlet
 
-        app, port = sf_mock_server
+        _app, port = sf_mock_server
         client = _MockSFClient(f"http://127.0.0.1:{port}")
         outlet = SalesforceOutlet(client=client)
         draft = make_pydantic_draft()
@@ -118,7 +118,7 @@ class TestSalesforcePayload:
         from phosphene.imi.event import PublicationEvent
         from phosphene.imi.outlets.salesforce import SalesforceOutlet
 
-        app, port = sf_mock_server
+        _app, port = sf_mock_server
         client = _MockSFClient(f"http://127.0.0.1:{port}")
         outlet = SalesforceOutlet(client=client)
         draft = make_pydantic_draft()
@@ -136,7 +136,7 @@ class TestSalesforcePayload:
         from phosphene.imi.event import PublicationEvent
         from phosphene.imi.outlets.salesforce import SalesforceOutlet
 
-        app, port = sf_mock_server
+        _app, port = sf_mock_server
         client = _MockSFClient(f"http://127.0.0.1:{port}")
         outlet = SalesforceOutlet(client=client)
         draft = make_pydantic_draft()
@@ -170,7 +170,7 @@ class TestSalesforcePayload:
         from phosphene.imi.event import PublicationEvent
         from phosphene.imi.outlets.salesforce import SalesforceOutlet
 
-        app, port = sf_mock_server
+        _app, port = sf_mock_server
         client = _MockSFClient(f"http://127.0.0.1:{port}")
         outlet = SalesforceOutlet(client=client)
 

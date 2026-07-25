@@ -97,7 +97,6 @@ class TestPushOutlet:
         magazine = FakeMagazineClient(base_url="https://observatory.wiki")
 
         # Simulate page appearing after push
-        original_exists = magazine.page_exists
         call_count = [0]
 
         def side_effect(title: str) -> bool:

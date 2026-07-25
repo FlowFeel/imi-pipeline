@@ -102,7 +102,7 @@ class TestWordPressPayload:
         from phosphene.imi.event import PublicationEvent
         from phosphene.imi.outlets.wordpress import WordPressOutlet
 
-        app, port = wp_mock_server
+        _app, port = wp_mock_server
         client = _MockWPClient(f"http://127.0.0.1:{port}")
         outlet = WordPressOutlet(client=client)
         draft = make_pydantic_draft()
@@ -119,7 +119,7 @@ class TestWordPressPayload:
         from phosphene.imi.event import PublicationEvent
         from phosphene.imi.outlets.wordpress import WordPressOutlet
 
-        app, port = wp_mock_server
+        _app, port = wp_mock_server
         client = _MockWPClient(f"http://127.0.0.1:{port}")
         outlet = WordPressOutlet(client=client)
         draft = make_pydantic_draft()
@@ -141,7 +141,7 @@ class TestWordPressPayload:
         from phosphene.imi.event import PublicationEvent
         from phosphene.imi.outlets.wordpress import WordPressOutlet
 
-        app, port = wp_mock_server
+        _app, port = wp_mock_server
         client = _MockWPClient(f"http://127.0.0.1:{port}")
         outlet = WordPressOutlet(client=client)
         draft = make_pydantic_draft()
@@ -162,7 +162,7 @@ class TestWordPressPayload:
         from phosphene.imi.event import PublicationEvent
         from phosphene.imi.outlets.wordpress import WordPressOutlet
 
-        app, port = wp_mock_server
+        _app, port = wp_mock_server
         client = _MockWPClient(f"http://127.0.0.1:{port}")
         outlet = WordPressOutlet(client=client)
         draft = make_pydantic_draft()
@@ -184,7 +184,7 @@ class TestWordPressPayload:
         from phosphene.imi.event import PublicationEvent
         from phosphene.imi.outlets.wordpress import WordPressOutlet
 
-        app, port = wp_mock_server
+        _app, port = wp_mock_server
         client = _MockWPClient(f"http://127.0.0.1:{port}")
         outlet = WordPressOutlet(client=client)
         draft = make_pydantic_draft()
@@ -260,7 +260,7 @@ class TestWordPressFormatterContract:
         from phosphene.imi.formatters import WordPressPostFormatter
         from phosphene.imi.outlets.wordpress import WordPressOutlet
 
-        app, port = wp_mock_server
+        _app, port = wp_mock_server
         client = _MockWPClient(f"http://127.0.0.1:{port}")
         outlet = WordPressOutlet(client=client)
         draft = make_pydantic_draft()
