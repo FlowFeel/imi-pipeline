@@ -99,7 +99,7 @@ services:
       - ./main-stubs/update-images-permissions.sh:/update-images-permissions.sh:ro
       - ./main-stubs/run-maintenance-scripts.sh:/run-maintenance-scripts.sh:ro
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost/ || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost/w/api.php || exit 1"]
       interval: 10s
       timeout: 10s
       start_period: 120s
