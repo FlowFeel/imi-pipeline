@@ -96,11 +96,11 @@ services:
     volumes:
       - ./testdata/init:/init:ro
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost/"]
+      test: ["CMD-SHELL", "curl -sf http://localhost/ || exit 1"]
       interval: 10s
       timeout: 10s
-      start_period: 60s
-      retries: 15
+      start_period: 120s
+      retries: 30
 
 volumes:
   temporal-db-test:
