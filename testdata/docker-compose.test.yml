@@ -20,13 +20,13 @@ services:
       temporal-db:
         condition: service_healthy
     environment:
-      DBHOST: temporal-db
-      DBNAME: temporal
-      DB_USER: temporal
-      DB_PWD: temporal
-      LOG_LEVEL: error
+      DB: postgres12
       DB_PORT: "5432"
-      DBTYPE: postgres12
+      POSTGRES_USER: temporal
+      POSTGRES_PWD: temporal
+      POSTGRES_SEEDS: temporal-db
+      DBNAME: temporal
+      LOG_LEVEL: error
       SKIP_DB_CREATE: "true"
     ports:
       - "7233:7233"
