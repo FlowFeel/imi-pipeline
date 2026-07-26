@@ -75,7 +75,7 @@ services:
   web:
     image: ghcr.io/flowfeel/observatory-mediawiki:2.1.1-observatory
     entrypoint: ["/bin/sh", "-c"]
-    command: ["echo 'Skipping broken entrypoint' && apache2ctl -D FOREGROUND"]
+    command: ["apache2ctl -D FOREGROUND"]
     depends_on:
       db:
         condition: service_healthy
