@@ -96,7 +96,7 @@ services:
     ports:
       - "8085:80"
     volumes:
-      - ./testdata/init:/init:ro
+      - ./init:/init:ro
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost/ || exit 1"]
       interval: 10s
