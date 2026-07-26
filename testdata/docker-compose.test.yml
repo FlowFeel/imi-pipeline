@@ -74,8 +74,6 @@ services:
 
   web:
     image: ghcr.io/flowfeel/observatory-mediawiki:2.1.1-observatory
-    entrypoint: ["/bin/sh", "-c"]
-    command: ["apache2ctl -D FOREGROUND"]
     depends_on:
       db:
         condition: service_healthy
@@ -97,6 +95,9 @@ services:
       - "8085:80"
     volumes:
       - ./init:/init:ro
+      - ./main-stubs/update-docker-gateway.sh:/update-docker-gateway.sh:ro
+      - ./main-stubs/update-images-permissions.sh:/update-images-permissions.sh:ro
+      - ./main-stubs/run-maintenance-scripts.sh:/run-maintenance-scripts.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost/ || exit 1"]
       interval: 10s
