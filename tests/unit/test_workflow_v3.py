@@ -263,7 +263,7 @@ class TestSyndicationSagaWorkflowV3:
             for a in acts
             if getattr(a, "__name__", str(a)) not in ("mock_sync_salesforce",)
         ]
-        acts_with_sf_fail = acts + [sf_fail]
+        acts_with_sf_fail = [*acts, sf_fail]
 
         async with await WorkflowEnvironment.start_time_skipping() as env:
             async with Worker(

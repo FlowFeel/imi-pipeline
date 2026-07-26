@@ -127,7 +127,7 @@ class TestWikitextAuthorCategoryExtraction:
 
     def test_author_and_category_extracted_when_missing_from_request(self) -> None:
         """When request has no author/category, they are parsed from wikitext."""
-        acts = make_activities()
+        make_activities()
         request = _build_request(ARTICLE_WIKITEXT)
         # Ensure request has no author/category overrides
         assert request.get("author", "") == "" or request["author"] == ""

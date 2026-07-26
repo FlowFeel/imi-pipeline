@@ -126,7 +126,7 @@ class TestWordPressOutlet:
         outlet = WordPressOutlet(client=client)
         event = make_event(title="Why Care Work Matters")
         outlet.publish(event)
-        stored_slugs = [k[1] for k in client.posts.keys()]
+        stored_slugs = [k[1] for k in client.posts]
         assert stored_slugs[0] == event.draft.slug
 
     def test_non_ascii_title_produces_ascii_slug(self) -> None:
@@ -142,7 +142,7 @@ class TestWordPressOutlet:
         outlet = WordPressOutlet(client=client)
         event = make_event(title="Land Reform \u2014 A New Paradigm")
         outlet.publish(event)
-        stored_slugs = [k[1] for k in client.posts.keys()]
+        stored_slugs = [k[1] for k in client.posts]
         slug = stored_slugs[0]
         # Must be pure ASCII
         assert slug.isascii(), f"Slug contains non-ASCII: {slug!r}"
@@ -207,7 +207,7 @@ class TestSalesforceOutlet:
         client = FakeSFClient()
         outlet = SalesforceOutlet(client=client)
         outlet.publish(make_event(title="Why Care Work Matters"))
-        record = list(client.records.values())[0]
+        record = next(iter(client.records.values()))
         assert record.get("Headline__c") == "Why Care Work Matters"
         assert "Name" not in record  # Name is auto-number
 
@@ -216,7 +216,7 @@ class TestSalesforceOutlet:
         client = FakeSFClient()
         outlet = SalesforceOutlet(client=client)
         outlet.publish(make_event())
-        record = list(client.records.values())[0]
+        record = next(iter(client.records.values()))
         assert "Date_Received__c" in record
         assert record.get("Pay__c") is False
         assert record.get("GTM_Site_Uploaded__c") is False
@@ -234,7 +234,7 @@ class TestSalesforceOutlet:
         )
         event_with_url = event.model_copy(update={"draft": draft_with_url})
         outlet.publish(event_with_url)
-        record = list(client.records.values())[0]
+        record = next(iter(client.records.values()))
         assert (
             record.get("Observatory_wiki_Site_Link__c")
             == "https://observatory.wiki/Test"

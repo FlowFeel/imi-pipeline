@@ -8,7 +8,6 @@ OKR: @okr_publish_pipeline
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any
 
 from phosphene.imi.activities import SyndicationActivities
@@ -30,15 +29,10 @@ def _make_activities(pardot_client: Any | None = None) -> SyndicationActivities:
     )
 
 
-def run(coro: Any) -> Any:
-    """Run a coroutine synchronously for testing (no pytest-asyncio needed)."""
-    return asyncio.get_event_loop().run_until_complete(coro)
-
-
 class TestSendPardotEmailWithOutletResults:
     """send_pardot_email builds result from outlet_results when available."""
 
-    def test_returns_sent_count_on_success(self) -> None:
+    async def test_returns_sent_count_on_success(self) -> None:
         """Activity returns 'pardot-sent:N/M' when client succeeds."""
         fake = FakePardotClient()
         acts = _make_activities(fake)
@@ -57,10 +51,10 @@ class TestSendPardotEmailWithOutletResults:
                 "salesforce": {"succeeded": True, "artifact": "a1e00000000001"},
             },
         }
-        result = run(acts.send_pardot_email(request))
+        result = await acts.send_pardot_email(request)
         assert result == "pardot-sent:1/1"
 
-    def test_calls_client_with_outlet_results(self) -> None:
+    async def test_calls_client_with_outlet_results(self) -> None:
         """Activity passes outlet artifact URLs to send_pipeline_notification."""
         fake = FakePardotClient()
         acts = _make_activities(fake)
@@ -78,14 +72,14 @@ class TestSendPardotEmailWithOutletResults:
                 },
             },
         }
-        run(acts.send_pardot_email(request))
+        await acts.send_pardot_email(request)
 
         assert len(fake.calls) == 1
         call_result = fake.calls[0]["result"]
         assert call_result["observatory"] == "https://observatory.wiki/Draft:Test"
         assert call_result["wordpress"] == "https://imi.org/wp/test/"
 
-    def test_only_succeeded_outlets_included(self) -> None:
+    async def test_only_succeeded_outlets_included(self) -> None:
         """Failed outlet results are not included in the Pardot result dict."""
         fake = FakePardotClient()
         acts = _make_activities(fake)
@@ -100,7 +94,7 @@ class TestSendPardotEmailWithOutletResults:
                 "wordpress": {"succeeded": False, "error": "Network error"},
             },
         }
-        run(acts.send_pardot_email(request))
+        await acts.send_pardot_email(request)
 
         call_result = fake.calls[0]["result"]
         assert "observatory" in call_result
@@ -110,7 +104,7 @@ class TestSendPardotEmailWithOutletResults:
 class TestSendPardotEmailFallbackToMetadata:
     """send_pardot_email falls back to request metadata when no outlet_results."""
 
-    def test_empty_outlet_results_uses_metadata(self) -> None:
+    async def test_empty_outlet_results_uses_metadata(self) -> None:
         """Empty outlet_results dict triggers fallback to title/source_url."""
         fake = FakePardotClient()
         acts = _make_activities(fake)
@@ -120,12 +114,12 @@ class TestSendPardotEmailFallbackToMetadata:
             "source_url": "https://example.com/article",
             "outlet_results": {},
         }
-        result = run(acts.send_pardot_email(request))
+        result = await acts.send_pardot_email(request)
         assert result.startswith("pardot-sent:")
         assert fake.calls[0]["result"]["title"] == "Care Work Matters"
         assert fake.calls[0]["result"]["source_url"] == "https://example.com/article"
 
-    def test_missing_outlet_results_key_uses_metadata(self) -> None:
+    async def test_missing_outlet_results_key_uses_metadata(self) -> None:
         """Request with no outlet_results key falls back to metadata."""
         fake = FakePardotClient()
         acts = _make_activities(fake)
@@ -134,11 +128,11 @@ class TestSendPardotEmailFallbackToMetadata:
             "title": "No Outlets Yet",
             "source_url": "https://example.com/no-outlets",
         }
-        result = run(acts.send_pardot_email(request))
+        result = await acts.send_pardot_email(request)
         assert result.startswith("pardot-sent:")
         assert fake.calls[0]["result"]["title"] == "No Outlets Yet"
 
-    def test_only_failed_outlets_uses_metadata(self) -> None:
+    async def test_only_failed_outlets_uses_metadata(self) -> None:
         """If all outlet results have succeeded=False, falls back to metadata."""
         fake = FakePardotClient()
         acts = _make_activities(fake)
@@ -150,17 +144,17 @@ class TestSendPardotEmailFallbackToMetadata:
                 "observatory": {"succeeded": False, "error": "timeout"},
             },
         }
-        result = run(acts.send_pardot_email(request))
+        result = await acts.send_pardot_email(request)
         assert result.startswith("pardot-sent:")
         call_result = fake.calls[0]["result"]
         assert call_result.get("title") == "All Failed"
 
-    def test_empty_request_uses_empty_strings(self) -> None:
+    async def test_empty_request_uses_empty_strings(self) -> None:
         """Minimal empty request does not raise, returns pardot-sent."""
         fake = FakePardotClient()
         acts = _make_activities(fake)
 
-        result = run(acts.send_pardot_email({}))
+        result = await acts.send_pardot_email({})
         assert result.startswith("pardot-sent:")
         call_result = fake.calls[0]["result"]
         assert call_result["title"] == ""
@@ -170,7 +164,7 @@ class TestSendPardotEmailFallbackToMetadata:
 class TestSendPardotEmailErrorHandling:
     """send_pardot_email captures exceptions — does not propagate."""
 
-    def test_raising_client_returns_pardot_error(self) -> None:
+    async def test_raising_client_returns_pardot_error(self) -> None:
         """A client that raises returns 'pardot-error:<exc>' instead of raising."""
 
         class ExplodingPardotClient:
@@ -182,12 +176,12 @@ class TestSendPardotEmailErrorHandling:
                 raise RuntimeError("Pardot API unreachable")
 
         acts = _make_activities(ExplodingPardotClient())  # type: ignore[arg-type]
-        result = run(acts.send_pardot_email({"title": "test"}))
+        result = await acts.send_pardot_email({"title": "test"})
 
         assert result.startswith("pardot-error:")
         assert "Pardot API unreachable" in result
 
-    def test_connection_error_returns_pardot_error(self) -> None:
+    async def test_connection_error_returns_pardot_error(self) -> None:
         """Connection errors are caught and reported as pardot-error."""
 
         class NetworkErrorClient:
@@ -197,12 +191,12 @@ class TestSendPardotEmailErrorHandling:
                 raise ConnectionError("connection refused")
 
         acts = _make_activities(NetworkErrorClient())  # type: ignore[arg-type]
-        result = run(acts.send_pardot_email({"title": "test"}))
+        result = await acts.send_pardot_email({"title": "test"})
 
         assert result.startswith("pardot-error:")
         assert "connection refused" in result
 
-    def test_forward_activity_does_not_raise(self) -> None:
+    async def test_forward_activity_does_not_raise(self) -> None:
         """send_pardot_email never propagates exceptions to the caller/saga."""
 
         class AlwaysRaisesClient:
@@ -213,7 +207,7 @@ class TestSendPardotEmailErrorHandling:
 
         acts = _make_activities(AlwaysRaisesClient())  # type: ignore[arg-type]
         # Must not raise
-        result = run(acts.send_pardot_email({"title": "test"}))
+        result = await acts.send_pardot_email({"title": "test"})
         assert isinstance(result, str)
 
 

@@ -16,6 +16,7 @@ OKR: @okr_publish_pipeline
 
 from __future__ import annotations
 
+import contextlib
 import json
 import urllib.parse
 import urllib.request
@@ -181,7 +182,7 @@ class RealMWClient:
         safe = self._safe_title(title)
         r = self._get(action="query", titles=safe)
         pages = r.get("query", {}).get("pages", {})
-        return list(pages.keys())[0] != "-1"
+        return next(iter(pages.keys())) != "-1"
 
     def page_url(self, title: str) -> str:
         """Return a URL for a page.
@@ -224,8 +225,6 @@ class RealMWClient:
     def purge_session(self) -> None:
         """Delete only pages created during this session."""
         for title in list(self._session_pages):
-            try:
+            with contextlib.suppress(Exception):
                 self.delete_page(title)
-            except Exception:
-                pass
         self._session_pages = []

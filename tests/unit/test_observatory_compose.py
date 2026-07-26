@@ -74,14 +74,14 @@ def db_service(compose):
 class TestImageConfig:
     """Assert the web service uses the correct image."""
 
-    def test_image_uses_flowfeel_registry(self, web_service):
+    def test_image_uses_flowfeel_registry(self, web_service) -> None:
         """Image must be from ghcr.io/flowfeel, not janfrel or phosphene."""
         image = web_service.get("image", "")
         assert "ghcr.io/flowfeel/observatory-mediawiki" in image, (
             f"Image should be ghcr.io/flowfeel/observatory-mediawiki, got: {image}"
         )
 
-    def test_image_has_explicit_tag(self, web_service):
+    def test_image_has_explicit_tag(self, web_service) -> None:
         """Image must have an explicit version tag, not :latest."""
         image = web_service.get("image", "")
         tag = image.split(":")[-1] if ":" in image else ""
@@ -93,14 +93,14 @@ class TestImageConfig:
 class TestMySQLConfig:
     """Assert MySQL version and DB server configuration."""
 
-    def test_mysql_version_is_8_4(self, db_service):
+    def test_mysql_version_is_8_4(self, db_service) -> None:
         """MySQL must be 8.4.0 — V1 data is 8.4, cannot downgrade to 8.0."""
         image = db_service.get("image", "")
         assert "mysql:8.4" in image, (
             f"MySQL must be 8.4.x (V1 data is 8.4, cannot downgrade). Got: {image}"
         )
 
-    def test_db_server_is_observatorywiki_db(self, web_service):
+    def test_db_server_is_observatorywiki_db(self, web_service) -> None:
         """MW_DB_SERVER must be observatorywiki-db, not 'db'.
 
         V1's compose had a service named 'db' which provided the DNS alias.
@@ -122,7 +122,7 @@ class TestVolumeMounts:
     The images volume must mount directly at the MW web path.
     """
 
-    def test_images_volume_mounts_at_mw_web_path(self, web_service):
+    def test_images_volume_mounts_at_mw_web_path(self, web_service) -> None:
         """Images volume must mount at /var/www/mediawiki/w/images.
 
         If it mounts at /mediawiki/images, author headshots and article
@@ -141,7 +141,7 @@ class TestVolumeMounts:
                     f"got: {mount_path}"
                 )
 
-    def test_db_data_volume_mounts_at_var_lib_mysql(self, db_service):
+    def test_db_data_volume_mounts_at_var_lib_mysql(self, db_service) -> None:
         """DB data volume must mount at /var/lib/mysql."""
         volumes = db_service.get("volumes", [])
         db_mounts = [v for v in volumes if "db-data" in str(v)]
@@ -159,7 +159,7 @@ class TestVolumeMounts:
 class TestExternalVolumes:
     """Assert prod uses external volumes pointing at V1's data."""
 
-    def test_volumes_are_external(self, compose):
+    def test_volumes_are_external(self, compose) -> None:
         """Prod volumes must be external — referencing V1's existing data."""
         volumes = compose.get("volumes", {})
         for name, config in volumes.items():
@@ -171,7 +171,7 @@ class TestExternalVolumes:
                 f"Volume '{name}' must be external in prod. Got: {config}"
             )
 
-    def test_db_data_volume_name_is_observatorywiki_db_data(self, compose):
+    def test_db_data_volume_name_is_observatorywiki_db_data(self, compose) -> None:
         """DB data volume must reference observatorywiki_db_data (underscore).
 
         Not observatorywiki_db-data (dash) — that's a different volume that
@@ -185,7 +185,7 @@ class TestExternalVolumes:
             f"not 'observatorywiki_db-data' (dash). Got: {name}"
         )
 
-    def test_images_volume_name_is_observatorywiki_images(self, compose):
+    def test_images_volume_name_is_observatorywiki_images(self, compose) -> None:
         """Images volume must reference observatorywiki_images.
 
         Not observatorywiki_mediawiki-images — that's a different volume
@@ -203,7 +203,7 @@ class TestExternalVolumes:
 class TestNetworkConfig:
     """Assert network configuration matches production."""
 
-    def test_uses_external_network(self, compose):
+    def test_uses_external_network(self, compose) -> None:
         """Prod must use the external observatorywiki_default network."""
         networks = compose.get("networks", {})
         for name, config in networks.items():

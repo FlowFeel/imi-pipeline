@@ -126,7 +126,7 @@ def _build_activities() -> SyndicationActivities:
     try:
         pardot_client: object = _PardotClientAdapter()
         # Validate the import is available (adapter delegates lazily, so probe now)
-        import pardot.notification  # noqa: F401
+        import pardot.notification
     except ImportError:
         from phosphene.imi.fakes import FakePardotClient
 
