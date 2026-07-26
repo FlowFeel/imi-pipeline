@@ -8,6 +8,7 @@ services:
       POSTGRES_DB: temporal
     volumes:
       - temporal-db-test:/var/lib/postgresql/data
+      - ./testdata/init-temporal:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "temporal"]
       interval: 5s
@@ -27,7 +28,6 @@ services:
       POSTGRES_SEEDS: temporal-db
       DBNAME: temporal
       LOG_LEVEL: error
-      SKIP_DB_CREATE: "true"
     ports:
       - "7233:7233"
     healthcheck:
