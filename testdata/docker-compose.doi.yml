@@ -1,0 +1,118 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# DOI Preprint Harness — WordPress + MariaDB + Crossref Stub
+#
+# Usage (from repo root):
+#   make doi-up          # prep mu-plugins, boot the stack, install WP
+#   make doi-test        # BDD scenarios against the running stack
+#   make doi-down        # tear down
+#
+# The mu-plugin source lives in janfrel/imi-wordpress:
+#   src/php/            → CPT + citation meta + Domain/ + Adapters/
+#   wp-content/mu-plugins/ → CI gateway plugins (app passwords, SQL gateway)
+# `make doi-prep` stages both into testdata/wp-mu-plugins/ (gitignored) so a
+# single bind mount gives WordPress the exact layout the plugins expect.
+# CI does a second checkout of imi-wordpress and passes IMI_WP_PATH.
+# ─────────────────────────────────────────────────────────────────────────────
+services:
+
+  # ── MariaDB for WordPress ──────────────────────────────────────────────────
+  doi-db:
+    image: mariadb:10.11
+    environment:
+      MARIADB_ROOT_PASSWORD: doi_root
+      MARIADB_DATABASE: imi_registry
+      MARIADB_USER: imi
+      MARIADB_PASSWORD: doi_pass
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+    networks:
+      - doi-net
+
+  # ── WordPress with the imi_registry mu-plugins ─────────────────────────────
+  doi-wp:
+    image: wordpress:6.4-php8.2-apache
+    depends_on:
+      doi-db:
+        condition: service_healthy
+    ports:
+      - "${WP_PORT:-18091}:80"
+    environment:
+      WORDPRESS_DB_HOST: doi-db
+      WORDPRESS_DB_NAME: imi_registry
+      WORDPRESS_DB_USER: imi
+      WORDPRESS_DB_PASSWORD: doi_pass
+      WORDPRESS_DEBUG: "1"
+      # Deposit target = the stub, not real Crossref.
+      CROSSREF_DEPOSIT_URL: http://doi-stub:8000/servlet/deposit
+    volumes:
+      - ./wp-mu-plugins:/var/www/html/wp-content/mu-plugins:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/wp-json/wp/v2/"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks:
+      - doi-net
+
+  # ── One-shot WP install (core, permalinks, app password) ───────────────────
+  doi-wp-setup:
+    image: wordpress:cli-php8.2
+    depends_on:
+      doi-wp:
+        condition: service_healthy
+    user: "33:33"
+    environment:
+      WORDPRESS_DB_HOST: doi-db
+      WORDPRESS_DB_NAME: imi_registry
+      WORDPRESS_DB_USER: imi
+      WORDPRESS_DB_PASSWORD: doi_pass
+    volumes:
+      - ./wp-mu-plugins:/var/www/html/wp-content/mu-plugins:ro
+    entrypoint: >
+      /bin/sh -c '
+      wp core install --url=http://localhost:18091 --title="IMI Registry Harness" \
+        --admin_user=harness --admin_password=harness_pass --admin_email=harness@ind.media --skip-email &&
+      wp rewrite structure "/%postname%/" --hard &&
+      wp user application-password create harness bdd-gateway --porcelain
+      '
+    networks:
+      - doi-net
+
+  # ── Crossref deposit stub ──────────────────────────────────────────────────
+  doi-stub:
+    build:
+      context: ./crossref-stub
+    ports:
+      - "${STUB_PORT:-18092}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/admin/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - doi-net
+
+  # ── BDD runner (same uv env as the rest of the pipeline) ───────────────────
+  doi-bdd:
+    build:
+      context: ../
+      dockerfile: Dockerfile
+    depends_on:
+      doi-wp-setup:
+        condition: service_completed_successfully
+      doi-stub:
+        condition: service_healthy
+    environment:
+      WP_BASE_URL: http://doi-wp
+      CROSSREF_STUB_URL: http://doi-stub:8000
+    command: ["behave", "features/doi_preprint_lifecycle.feature", "--no-capture", "--format", "pretty"]
+    networks:
+      - doi-net
+
+networks:
+  doi-net:
+    driver: bridge

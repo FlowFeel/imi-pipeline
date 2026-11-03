@@ -133,17 +133,50 @@ jobs:
           path: reports/integration.xml
 
   # ─────────────────────────────────
+  # Gate 5: DOI Harness (Docker)
+  #
+  # Boots WP + MariaDB + Crossref stub.
+  # Runs the DOI lifecycle BDD scenarios
+  # and black-box citation-tag invariants
+  # against the real rendered pages.
+  # ─────────────────────────────────
+  doi-harness:
+    name: "DOI Harness (Docker)"
+    runs-on: ubuntu-latest
+    needs: [lint, unit]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout imi-wordpress (mu-plugin source)
+        run: |
+          git config --global url."https://${{ secrets.IMITWP_TOKEN }}@github.com/".insteadOf "https://github.com/"
+          git clone --depth 1 https://github.com/janfrel/imi-wordpress.git ../imi-wordpress
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - run: uv sync --all-extras
+
+      - name: Boot DOI stack
+        run: make doi-up IMI_WORDPRESS_PATH=../imi-wordpress
+
+      - name: Run DOI harness
+        run: make doi-test
+
+      - name: Tear down
+        if: always()
+        run: make doi-down
+
+  # ─────────────────────────────────
   # Summary Gate
   # ─────────────────────────────────
   ci-pass:
     name: "CI"
     runs-on: ubuntu-latest
-    needs: [lint, bdd, unit, integration]
+    needs: [lint, bdd, unit, integration, doi-harness]
     if: always()
     steps:
       - name: Check all gates
         run: |
-          for r in "${{ needs.lint.result }}" "${{ needs.bdd.result }}" "${{ needs.unit.result }}" "${{ needs.integration.result }}"; do
+          for r in "${{ needs.lint.result }}" "${{ needs.bdd.result }}" "${{ needs.unit.result }}" "${{ needs.integration.result }}" "${{ needs.doi-harness.result }}"; do
             if [ "$r" != "success" ]; then echo "Gate failed: $r"; exit 1; fi
           done
           echo "All gates passed"

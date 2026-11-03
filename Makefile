@@ -1,4 +1,4 @@
-.PHONY: test bdd lint ci proof unit integration clean
+.PHONY: test bdd lint ci proof unit integration doi-prep doi-up doi-down doi-test clean
 
 # ── Core ──
 
@@ -28,4 +28,25 @@ integration:     ## Integration tests only
 
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} +
-	rm -rf .pytest_cache .ruff_cache dist/ reports/
+	rm -rf .pytest_cache .ruff_cache dist/ reports/ testdata/wp-mu-plugins/
+
+# ── DOI Harness (WP + MariaDB + Crossref stub) ──
+
+COMPOSE_DOI := testdata/docker-compose.doi.yml
+IMI_WP_PATH ?= ../imi-wordpress
+
+doi-prep:         ## Stage mu-plugins from imi-wordpress into testdata/wp-mu-plugins/
+	mkdir -p testdata/wp-mu-plugins
+	cp -r $(IMI_WP_PATH)/src/php/. testdata/wp-mu-plugins/
+	cp $(IMI_WP_PATH)/wp-content/mu-plugins/*.php testdata/wp-mu-plugins/
+
+doi-up: doi-prep  ## Boot the DOI harness stack (WP + MariaDB + stub)
+	docker compose -f $(COMPOSE_DOI) up -d --wait
+
+doi-test:         ## Run DOI lifecycle BDD scenarios against the stack
+	WP_BASE_URL=http://localhost:$${WP_PORT:-18091} CROSSREF_STUB_URL=http://localhost:$${STUB_PORT:-18092} \
+		uv run behave features/doi_preprint_lifecycle.feature --no-capture --format pretty
+
+doi-down:         ## Tear down the DOI harness stack
+	docker compose -f $(COMPOSE_DOI) down -v
+	rm -rf testdata/wp-mu-plugins/
