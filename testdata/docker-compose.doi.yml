@@ -1,28 +1,13 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# DOI Preprint Harness — WordPress + MariaDB + Crossref Stub
-#
-# Usage (from repo root):
-#   make doi-up          # prep mu-plugins, boot the stack, install WP
-#   make doi-test        # BDD scenarios against the running stack
-#   make doi-down        # tear down
-#
-# The mu-plugin source lives in janfrel/imi-wordpress:
-#   src/php/            → CPT + citation meta + Domain/ + Adapters/
-#   wp-content/mu-plugins/ → CI gateway plugins (app passwords, SQL gateway)
-# `make doi-prep` stages both into testdata/wp-mu-plugins/ (gitignored) so a
-# single bind mount gives WordPress the exact layout the plugins expect.
-# CI does a second checkout of imi-wordpress and passes IMI_WP_PATH.
-# ─────────────────────────────────────────────────────────────────────────────
 services:
 
   # ── MariaDB for WordPress ──────────────────────────────────────────────────
   doi-db:
     image: mariadb:10.11
     environment:
-      MARIADB_ROOT_PASSWORD: ***
+      MARIADB_ROOT_PASSWORD: "testrootpass"
       MARIADB_DATABASE: imi_registry
       MARIADB_USER: imi
-      MARIADB_PASSWORD: ***
+      MARIADB_PASSWORD: "testpass"
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 5s
@@ -43,9 +28,8 @@ services:
       WORDPRESS_DB_HOST: doi-db
       WORDPRESS_DB_NAME: imi_registry
       WORDPRESS_DB_USER: imi
-      WORDPRESS_DB_PASSWORD: ***
+      WORDPRESS_DB_PASSWORD: "testpass"
       WORDPRESS_DEBUG: "1"
-      # Deposit target = the stub, not real Crossref.
       CROSSREF_DEPOSIT_URL: http://doi-stub:8000/servlet/deposit
     volumes:
       - ./wp-mu-plugins:/var/www/html/wp-content/mu-plugins:ro
