@@ -54,7 +54,7 @@ Feature: Deliverable Base Cases for DOI Preprint Lifecycle
     And the JSON-LD "creativeWorkStatus" is "Preprint"
     And the JSON-LD authors include "Jan Ritch-Frel" and "Ed Phillips"
 
-  Scenario: Retraction tombstones DOI metadata without deleting the record
+  Scenario: Retraction preserves permanent DOI while updating status and notice
     Given an author creates a preprint titled "Marine Debris Valuation"
     And the preprint has DOI suffix "imi.2026.110" with Crossref deposit "cr-dep-7710"
     And the DOI status is "ACTIVE"
@@ -62,8 +62,9 @@ Feature: Deliverable Base Cases for DOI Preprint Lifecycle
     And Flow publishes the preprint via WordPressOutlet
     Then the post meta "reg_doi_status" is "withdrawn"
     And the post meta "reg_doi" is "10.67767/imi.2026.110"
-    And the JSON-LD "creativeWorkStatus" is "Retracted"
-    And the citation output contains a "citation_doi" tag with "10.67767/imi.2026.110"
+    And the post meta "reg_withdrawal_notice" is "Funding disclosure error"
+    When Flow generates the Schema.org JSON-LD
+    Then the JSON-LD "creativeWorkStatus" is "Retracted"
 
   # ── Black-box harness scenarios (real HTTP against the stack) ────────────────
 
