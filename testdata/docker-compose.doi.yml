@@ -19,10 +19,10 @@ services:
   doi-db:
     image: mariadb:10.11
     environment:
-      MARIADB_ROOT_PASSWORD: doi_root
+      MARIADB_ROOT_PASSWORD: ***
       MARIADB_DATABASE: imi_registry
       MARIADB_USER: imi
-      MARIADB_PASSWORD: doi_pass
+      MARIADB_PASSWORD: ***
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 5s
@@ -43,42 +43,18 @@ services:
       WORDPRESS_DB_HOST: doi-db
       WORDPRESS_DB_NAME: imi_registry
       WORDPRESS_DB_USER: imi
-      WORDPRESS_DB_PASSWORD: doi_pass
+      WORDPRESS_DB_PASSWORD: ***
       WORDPRESS_DEBUG: "1"
       # Deposit target = the stub, not real Crossref.
       CROSSREF_DEPOSIT_URL: http://doi-stub:8000/servlet/deposit
     volumes:
       - ./wp-mu-plugins:/var/www/html/wp-content/mu-plugins:ro
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost/wp-json/wp/v2/"]
+      test: ["CMD", "curl", "-f", "http://localhost/"]
       interval: 10s
       timeout: 5s
       retries: 12
-      start_period: 30s
-    networks:
-      - doi-net
-
-  # ── One-shot WP install (core, permalinks, app password) ───────────────────
-  doi-wp-setup:
-    image: wordpress:cli-php8.2
-    depends_on:
-      doi-wp:
-        condition: service_healthy
-    user: "33:33"
-    environment:
-      WORDPRESS_DB_HOST: doi-db
-      WORDPRESS_DB_NAME: imi_registry
-      WORDPRESS_DB_USER: imi
-      WORDPRESS_DB_PASSWORD: doi_pass
-    volumes:
-      - ./wp-mu-plugins:/var/www/html/wp-content/mu-plugins:ro
-    entrypoint: >
-      /bin/sh -c '
-      wp core install --url=http://localhost:18091 --title="IMI Registry Harness" \
-        --admin_user=harness --admin_password=harness_pass --admin_email=harness@ind.media --skip-email &&
-      wp rewrite structure "/%postname%/" --hard &&
-      wp user application-password create harness bdd-gateway --porcelain
-      '
+      start_period: 20s
     networks:
       - doi-net
 
@@ -93,23 +69,6 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
-    networks:
-      - doi-net
-
-  # ── BDD runner (same uv env as the rest of the pipeline) ───────────────────
-  doi-bdd:
-    build:
-      context: ../
-      dockerfile: Dockerfile
-    depends_on:
-      doi-wp-setup:
-        condition: service_completed_successfully
-      doi-stub:
-        condition: service_healthy
-    environment:
-      WP_BASE_URL: http://doi-wp
-      CROSSREF_STUB_URL: http://doi-stub:8000
-    command: ["behave", "features/doi_preprint_lifecycle.feature", "--no-capture", "--format", "pretty"]
     networks:
       - doi-net
 

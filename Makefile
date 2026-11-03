@@ -40,8 +40,9 @@ doi-prep:         ## Stage mu-plugins from imi-wordpress into testdata/wp-mu-plu
 	cp -r $(IMI_WP_PATH)/src/php/. testdata/wp-mu-plugins/
 	cp $(IMI_WP_PATH)/wp-content/mu-plugins/*.php testdata/wp-mu-plugins/
 
-doi-up: doi-prep  ## Boot the DOI harness stack (WP + MariaDB + stub)
+doi-up: doi-prep  ## Boot the DOI harness stack and configure WP
 	docker compose -f $(COMPOSE_DOI) up -d --wait
+	python3 testdata/setup_wp.py
 
 doi-test:         ## Run DOI lifecycle BDD scenarios against the stack
 	WP_BASE_URL=http://localhost:$${WP_PORT:-18091} CROSSREF_STUB_URL=http://localhost:$${STUB_PORT:-18092} \
