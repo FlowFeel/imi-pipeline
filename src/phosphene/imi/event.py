@@ -33,6 +33,7 @@ from dataclasses import field as dc_field
 from datetime import UTC, datetime
 from typing import Any
 
+from phosphene.utils.text import slugify
 from pydantic import Field, model_validator
 
 from phosphene.imi.work import ArticleDraft, Draft, InvariantStatic, PublicationWork
@@ -92,7 +93,7 @@ class PublicationEvent(InvariantStatic):
             object.__setattr__(
                 self,
                 "idempotency_key",
-                self.work.title.lower().replace(" ", "-")[:80],
+                slugify(self.work.title, max_length=80),
             )
 
 

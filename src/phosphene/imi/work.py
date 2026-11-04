@@ -12,7 +12,6 @@ OKR: @okr_publish_pipeline
 
 from __future__ import annotations
 
-import re
 from collections.abc import Sequence
 from typing import Annotated, Any, Literal, Union
 
@@ -26,12 +25,9 @@ from phosphene.imi_wordpress.domain import (
     PreprintEntry,
     VersionInfo,
 )
+from phosphene.utils.text import slugify
+from phosphene.utils.wikitext import render_wikitext_template
 from pydantic import BaseModel, Field, model_validator
-
-
-def _slugify(title: str) -> str:
-    """Convert a title to a URL-safe slug."""
-    return re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
 
 
 class InvariantStatic(BaseModel):
@@ -65,7 +61,7 @@ class ArticleDraft(InvariantStatic):
     @property
     def slug(self) -> str:
         """URL-safe slug derived deterministically from the title."""
-        return _slugify(self.title)
+        return slugify(self.title)
 
     @model_validator(mode="after")
     def no_empty_strings(self) -> ArticleDraft:
@@ -110,7 +106,7 @@ class PreprintWork(InvariantStatic):
     @property
     def slug(self) -> str:
         """URL-safe slug derived deterministically from the title."""
-        return _slugify(self.title)
+        return slugify(self.title)
 
     @model_validator(mode="after")
     def no_empty_strings(self) -> PreprintWork:
@@ -151,15 +147,15 @@ class PreprintWork(InvariantStatic):
         the {{Preprint}} banner if in live preprint state.
         MediaWiki consumes this without dependency on Crossref/DOI infrastructure.
         """
-        banner = (
-            "{{Preprint}}\n\n"
-            if self.editorial_state == EditorialState.LIVE_PREPRINT
-            else ""
-        )
         content = self.body or self.abstract
+        body = (
+            render_wikitext_template("Preprint", {}, body=content)
+            if self.editorial_state == EditorialState.LIVE_PREPRINT
+            else content
+        )
         return ArticleDraft(
             title=self.title,
-            body=f"{banner}{content}",
+            body=body,
             author=self.primary_author.name,
             category="Preprints",
             keywords=list(self.keywords),

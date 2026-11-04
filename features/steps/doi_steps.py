@@ -27,12 +27,14 @@ from phosphene.imi_wordpress.domain import (
     EditorialState,
     VersionInfo,
 )
+from phosphene.utils.html import extract_jsonld, extract_meta_tags
 
 from phosphene.imi.event import PublicationEvent
 from phosphene.imi.outlets.wordpress import WordPressOutlet
 from phosphene.imi.work import PreprintWork
 
 WP_BASE_URL = os.environ.get("WP_BASE_URL", "http://localhost:18091")
+_CR_DEP_PATTERN = re.compile(r"cr-dep-\d+")
 STUB_BASE_URL = os.environ.get("CROSSREF_STUB_URL", "http://localhost:18092")
 
 _PREFIX = "10.67767/"
@@ -313,8 +315,7 @@ def step_render_citation_tags(context: Any) -> None:
         work = _build_preprint_work(context)
         context.preprint_id = _publish_work_via_outlet(work)
     html = _rendered_page(context.preprint_id)
-    tags = dict(re.findall(r'<meta name="(citation_[a-z_]+)" content="([^"]*)"', html))
-    context.citation_tags = tags
+    context.citation_tags = extract_meta_tags(html, prefix="citation_")
 
 
 @when("Flow generates the Schema.org JSON-LD")
@@ -323,10 +324,7 @@ def step_render_jsonld(context: Any) -> None:
         work = _build_preprint_work(context)
         context.preprint_id = _publish_work_via_outlet(work)
     html = _rendered_page(context.preprint_id)
-    match = re.search(
-        r'<script type="application/ld\+json">(.*?)</script>', html, re.DOTALL
-    )
-    context.jsonld = json.loads(match.group(1)) if match else {}
+    context.jsonld = extract_jsonld(html)
 
 
 @when("Flow publishes the preprint via WordPressOutlet")
@@ -373,10 +371,7 @@ def step_jsonld_is(context: Any, key: str, value: str) -> None:
     # If JSON-LD has not been fetched yet in this scenario, fetch from rendered page
     if not getattr(context, "jsonld", None) and getattr(context, "preprint_id", None):
         html = _rendered_page(context.preprint_id)
-        match = re.search(
-            r'<script type="application/ld\+json">(.*?)</script>', html, re.DOTALL
-        )
-        context.jsonld = json.loads(match.group(1)) if match else {}
+        context.jsonld = extract_jsonld(html)
     ld = getattr(context, "jsonld", {})
     assert ld.get(key) == value, f"jsonld[{key}]={ld.get(key)!r}, expected {value!r}"
 
@@ -388,10 +383,7 @@ def step_citation_contains(context: Any, tag: str, value: str) -> None:
         context, "preprint_id", None
     ):
         html = _rendered_page(context.preprint_id)
-        tags = dict(
-            re.findall(r'<meta name="(citation_[a-z_]+)" content="([^"]*)"', html)
-        )
-        context.citation_tags = tags
+        context.citation_tags = extract_meta_tags(html, prefix="citation_")
     tags = getattr(context, "citation_tags", {})
     assert tags.get(tag) == value, f"{tag}={tags.get(tag)!r}, expected {value!r}"
 
@@ -402,10 +394,7 @@ def step_citation_absent(context: Any, tag: str) -> None:
         context, "preprint_id", None
     ):
         html = _rendered_page(context.preprint_id)
-        tags = dict(
-            re.findall(r'<meta name="(citation_[a-z_]+)" content="([^"]*)"', html)
-        )
-        context.citation_tags = tags
+        context.citation_tags = extract_meta_tags(html, prefix="citation_")
     tags = getattr(context, "citation_tags", {})
     assert tag not in tags, f"unexpected {tag}={tags[tag]!r} — 404-leak risk"
 
@@ -434,7 +423,7 @@ def step_post_meta_int(context: Any, key: str, value: int) -> None:
 @then('the stub returns a deposit receipt with a "cr-dep-" id')
 def step_receipt_id(context: Any) -> None:
     body = context.deposit_response
-    match = re.search(r"cr-dep-\d+", body)
+    match = _CR_DEP_PATTERN.search(body)
     assert context.deposit_code == 201, f"deposit code={context.deposit_code}"
     assert match, f"no cr-dep id in {body!r}"
     context.receipt_id = match.group(0)

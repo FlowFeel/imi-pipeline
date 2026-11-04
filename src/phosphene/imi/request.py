@@ -22,6 +22,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from dataclasses import fields as dc_fields
 
+from phosphene.utils.text import slugify
+
 
 @dataclass
 class SyndicationRequest:
@@ -80,7 +82,7 @@ class SyndicationRequest:
     def __post_init__(self) -> None:
         """Set idempotency key from title slug if not provided."""
         if not self.idempotency_key:
-            self.idempotency_key = self.title.lower().replace(" ", "-")[:80]
+            self.idempotency_key = slugify(self.title, max_length=80)
 
     @classmethod
     def from_dict(cls, d: dict) -> SyndicationRequest:

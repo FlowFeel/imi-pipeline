@@ -12,7 +12,7 @@ OKR: @okr_publish_pipeline
 
 from __future__ import annotations
 
-import re
+from phosphene.utils.text import extract_url_title, parse_command_line
 
 from phosphene.imi.request import SyndicationRequest
 
@@ -75,26 +75,20 @@ class TelegramTrigger:
         Returns:
             Tuple of (url, outlets_dict). url may be empty if not found.
         """
+        url, flags = parse_command_line(text)
         outlets = dict(_DEFAULT_OUTLETS)
-
-        # Extract --outlets=x,y,z flag if present
-        outlets_match = re.search(r"--outlets=([\w,]+)", text)
-        if outlets_match:
-            selected = {o.strip().lower() for o in outlets_match.group(1).split(",")}
+        if "outlets" in flags:
+            selected = {o.strip().lower() for o in flags["outlets"].split(",")}
             # Allow only known outlets; unknown ones are silently dropped
             valid_selected = selected & _KNOWN_OUTLETS
             outlets = {name: (name in valid_selected) for name in _KNOWN_OUTLETS}
 
-        # Extract URL — last http(s) token in the text
-        url_match = re.search(r"https?://\S+", text)
-        url = url_match.group(0) if url_match else ""
-
         return url, outlets
 
     def _extract_title(self, url: str) -> str:
-        """Extract an article title from an Observatory URL slug.
+        r"""Extract an article title from an Observatory URL slug.
 
-        Converts a URL path like '/Cave_Art_in_France' to 'Cave Art in France'.
+        Converts a URL path like '/Cave_Art_in_France' to 'Cave Art in France\.
         Falls back to the raw URL if no path is found.
 
         Args:
@@ -103,13 +97,4 @@ class TelegramTrigger:
         Returns:
             Human-readable title derived from the URL path, or the URL itself.
         """
-        # Extract last path segment after the final slash
-        path_match = re.search(r"/([^/]+)$", url)
-        if not path_match:
-            return url
-        slug = path_match.group(1)
-        # Decode percent-encoding basics and replace underscores/hyphens with spaces
-        title = re.sub(r"[_-]", " ", slug)
-        # Remove query string artifacts
-        title = re.split(r"[?#]", title)[0]
-        return title.strip()
+        return extract_url_title(url)

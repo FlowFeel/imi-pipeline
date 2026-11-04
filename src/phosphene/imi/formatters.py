@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from phosphene.utils.wikitext import render_wikitext_template
+
 from phosphene.imi.draft import Draft
 
 
@@ -18,11 +20,14 @@ class ObservatoryWikitextFormatter:
 
     def format_wikitext(self, draft: Draft) -> str:
         """Render a Draft to wikitext using the standard Article template."""
-        return (
-            f"{{{{Article|Headline={draft.title}"
-            f"|Author={draft.author}"
-            f"|Section={draft.category}}}}}\n\n"
-            f"{draft.body}"
+        return render_wikitext_template(
+            "Article",
+            {
+                "Headline": draft.title,
+                "Author": draft.author,
+                "Section": draft.category,
+            },
+            body=draft.body,
         )
 
 
