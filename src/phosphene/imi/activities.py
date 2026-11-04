@@ -31,6 +31,7 @@ from typing import Any
 from temporalio import activity
 
 from phosphene.imi.protocols import (
+    CrossrefClientProtocol,
     MWClientProtocol,
     PardotClientProtocol,
     SFClientProtocol,
@@ -59,6 +60,7 @@ class SyndicationActivities:
         mw_client: MWClientProtocol,
         sf_client: SFClientProtocol,
         pardot_client: PardotClientProtocol | None = None,
+        crossref_client: CrossrefClientProtocol | None = None,
     ) -> None:
         """Initialise with injectable clients satisfying protocol interfaces."""
         self._wp = wp_client
@@ -69,6 +71,11 @@ class SyndicationActivities:
 
             pardot_client = FakePardotClient()
         self._pardot_client = pardot_client
+        if crossref_client is None:
+            from phosphene.imi.fakes import FakeCrossrefClient
+
+            crossref_client = FakeCrossrefClient()
+        self._crossref = crossref_client
 
     # ------------------------------------------------------------------
     # Forward activities
@@ -231,6 +238,181 @@ class SyndicationActivities:
         Args:
             artifact: Artifact ID from the forward activity (ignored).
         """
+
+    # ------------------------------------------------------------------
+    # Scholarly Preprint & Crossref DOI Activities
+    # ------------------------------------------------------------------
+
+    @activity.defn
+    async def publish_wordpress_preprint(self, request: Any) -> dict[str, Any]:
+        """Publish scholarly preprint to WordPress with DOI status pending."""
+        from phosphene.imi_wordpress.domain import (
+            DOI,
+            Author,
+            DOIRecord,
+            DOIStatus,
+            EditorialState,
+            License,
+            VersionInfo,
+        )
+
+        from phosphene.imi.event import PublicationEvent
+        from phosphene.imi.outlets.wordpress import WordPressOutlet
+        from phosphene.imi.request import PreprintDepositRequest
+        from phosphene.imi.work import PreprintWork
+
+        req = (
+            PreprintDepositRequest.from_dict(request)
+            if isinstance(request, dict)
+            else request
+        )
+        suffix = req.doi_suffix.replace("imi.2026.", "")
+        doi = DOI(suffix=f"imi.2026.{suffix}")
+        primary = Author(
+            name=req.primary_author_name,
+            orcid=req.primary_author_orcid or None,
+        )
+        coauthors = [Author(name=name) for name in req.coauthor_names]
+        doi_rec = DOIRecord(
+            doi=doi,
+            status=DOIStatus.PENDING,
+            deposit_id="",
+            minted_date="",
+        )
+        work = PreprintWork(
+            title=req.title,
+            primary_author=primary,
+            coauthors=coauthors,
+            abstract=req.abstract,
+            doi_record=doi_rec,
+            version=VersionInfo(number=1),
+            editorial_state=EditorialState.LIVE_PREPRINT,
+            license=License.CC_BY_NC_SA_4_0,
+        )
+
+        outlet = WordPressOutlet(client=self._wp)
+        result = outlet.publish(
+            PublicationEvent(work=work, publisher_id=req.publisher_id)
+        )
+        if not result.succeeded:
+            raise RuntimeError(result.error or "WordPress preprint publish failed")
+
+        post_url = result.artifact or ""
+        post_id_raw = result.metadata.get("post_id", "0")
+        try:
+            post_id = int(post_id_raw)
+        except (ValueError, TypeError):
+            post_id = 0
+
+        return {
+            "post_id": post_id,
+            "post_url": post_url,
+            "doi": doi.value,
+            "title": req.title,
+        }
+
+    @activity.defn
+    async def deposit_crossref(self, request: Any) -> dict[str, Any]:
+        """Generate schema 5.3.1 XML and deposit metadata to Crossref."""
+        from phosphene.imi_wordpress.domain import (
+            DOI,
+            Author,
+            DOIRecord,
+            DOIStatus,
+            EditorialState,
+            License,
+            VersionInfo,
+        )
+
+        from phosphene.imi.crossref import CrossrefXmlBuilder
+        from phosphene.imi.work import PreprintWork
+
+        title = request.get("title", "")
+        author_name = request.get("primary_author_name", "Author")
+        author_orcid = request.get("primary_author_orcid", "")
+        coauthors = [Author(name=n) for n in request.get("coauthor_names", [])]
+        target_url = request.get("target_url") or request.get("post_url", "")
+        doi_val = request.get("doi", "")
+        suffix = doi_val.replace("10.67767/imi.2026.", "").replace("10.67767/", "")
+
+        work = PreprintWork(
+            title=title,
+            primary_author=Author(name=author_name, orcid=author_orcid or None),
+            coauthors=coauthors,
+            abstract=request.get("abstract", ""),
+            doi_record=DOIRecord(
+                doi=DOI(suffix=f"imi.2026.{suffix}"),
+                status=DOIStatus.PENDING,
+            ),
+            version=VersionInfo(number=1),
+            editorial_state=EditorialState.LIVE_PREPRINT,
+            license=License.CC_BY_NC_SA_4_0,
+        )
+
+        xml = CrossrefXmlBuilder.build_xml(work, target_url=target_url)
+        receipt = self._crossref.deposit(xml)
+
+        if not receipt.is_valid:
+            raise RuntimeError(receipt.error or "Crossref deposit was rejected")
+
+        return {
+            "deposit_id": receipt.deposit_id,
+            "doi": receipt.doi,
+            "status": receipt.status,
+        }
+
+    @activity.defn
+    async def poll_crossref_status(self, request: Any) -> dict[str, Any]:
+        """Poll Crossref receipt to confirm registration."""
+        deposit_id = request.get("deposit_id", "")
+        receipt = self._crossref.get_deposit_status(deposit_id)
+        if not receipt.is_valid:
+            raise RuntimeError(receipt.error or f"Failed to poll deposit {deposit_id}")
+
+        return {
+            "deposit_id": receipt.deposit_id,
+            "doi": receipt.doi,
+            "status": receipt.status,
+        }
+
+    @activity.defn
+    async def activate_wordpress_doi(self, request: Any) -> dict[str, Any]:
+        """Activate DOI on WordPress after confirmed Crossref deposit."""
+        import time
+
+        post_id = int(request.get("post_id", 0))
+        deposit_id = request.get("deposit_id", "")
+        doi = request.get("doi", "")
+        minted_date = time.strftime("%Y-%m-%d")
+
+        meta_update = {
+            "reg_doi_status": "active",
+            "reg_crossref_deposit_id": deposit_id,
+            "reg_doi": doi,
+            "reg_doi_url": f"https://doi.org/{doi}",
+            "reg_doi_minted_date": minted_date,
+        }
+
+        self._wp.update_post(
+            post_type="imi_registry",
+            post_id=post_id,
+            data={"meta": meta_update},
+        )
+
+        return {
+            "activated": True,
+            "post_id": post_id,
+            "doi": doi,
+            "status": "active",
+        }
+
+    @activity.defn
+    async def rollback_wordpress_preprint(self, post_info: Any) -> None:
+        """Rollback compensation: delete post if DOI registration aborted."""
+        if isinstance(post_info, dict):
+            post_url = post_info.get("post_url", "")
+            if post_url:
+                self._wp.delete_post(post_url)
 
     # ------------------------------------------------------------------
     # Internal helpers

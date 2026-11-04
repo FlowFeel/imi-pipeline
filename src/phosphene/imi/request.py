@@ -140,3 +140,45 @@ class SyndicationResult:
     outlet_results: dict[str, OutletOutcome] = field(default_factory=dict)
     error_message: str = ""
     compensations_executed: list[str] = field(default_factory=list)
+
+
+@dataclass
+class PreprintDepositRequest:
+    """Canonical input for PreprintDepositSagaWorkflow.
+
+    Dataclass so Temporal default JSON converter handles it without codecs.
+    """
+
+    title: str
+    primary_author_name: str
+    doi_suffix: str
+    primary_author_orcid: str = ""
+    abstract: str = ""
+    coauthor_names: list[str] = field(default_factory=list)
+    target_url: str = ""
+    publisher_id: str = "flow"
+    idempotency_key: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.idempotency_key:
+            self.idempotency_key = slugify(self.title, max_length=80)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> PreprintDepositRequest:
+        known = {f.name for f in dc_fields(cls)}
+        filtered = {k: v for k, v in data.items() if k in known and v is not None}
+        return cls(**filtered)
+
+
+@dataclass
+class PreprintDepositResult:
+    """Canonical output of PreprintDepositSagaWorkflow."""
+
+    succeeded: bool
+    post_id: int = 0
+    post_url: str = ""
+    doi: str = ""
+    deposit_id: str = ""
+    doi_status: str = "pending"
+    error_message: str = ""
+    compensations_executed: list[str] = field(default_factory=list)

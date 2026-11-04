@@ -30,7 +30,7 @@ from phosphene.temporal.client import TEMPORAL_TASK_QUEUE, get_client
 from temporalio.worker import Worker
 
 from phosphene.imi.activities import SyndicationActivities
-from phosphene.imi.workflow import SyndicationSagaWorkflow
+from phosphene.imi.workflow import PreprintDepositSagaWorkflow, SyndicationSagaWorkflow
 
 IMI_WORKER_MODE: str = os.environ.get("IMI_WORKER_MODE", "standalone")
 IMI_TASK_QUEUE: str = os.environ.get("IMI_TASK_QUEUE", TEMPORAL_TASK_QUEUE)
@@ -133,11 +133,22 @@ def _build_activities() -> SyndicationActivities:
         pardot_client = FakePardotClient()  # type: ignore[assignment]
 
     mw_client = UrllibMWClient(config=MWConfig.from_env())
+    from phosphene.imi.crossref import HttpCrossrefClient
+
+    crossref_url = os.environ.get(
+        "CROSSREF_BASE_URL",
+        os.environ.get("CROSSREF_STUB_URL", "https://doi.crossref.org"),
+    )
+    crossref_user = os.environ.get("CROSSREF_USERNAME", "")
+    crossref_pass = os.environ.get("CROSSREF_PASSWORD", "")
+    crossref_client = HttpCrossrefClient(crossref_url, crossref_user, crossref_pass)
+
     return SyndicationActivities(
         wp_client=wp_client,
         mw_client=mw_client,
         sf_client=sf_client,
         pardot_client=pardot_client,  # type: ignore[arg-type]
+        crossref_client=crossref_client,
     )
 
 
@@ -148,7 +159,7 @@ async def start() -> None:
     worker = Worker(
         client,
         task_queue=IMI_TASK_QUEUE,
-        workflows=[SyndicationSagaWorkflow],
+        workflows=[SyndicationSagaWorkflow, PreprintDepositSagaWorkflow],
         activities=[
             activities.publish_wordpress,
             activities.publish_mediawiki,
@@ -158,6 +169,11 @@ async def start() -> None:
             activities.delete_mediawiki_page,
             activities.delete_salesforce_record,
             activities.noop_compensation,
+            activities.publish_wordpress_preprint,
+            activities.deposit_crossref,
+            activities.poll_crossref_status,
+            activities.activate_wordpress_doi,
+            activities.rollback_wordpress_preprint,
         ],
     )
     async with worker:

@@ -98,10 +98,12 @@ class WordPressOutlet(PublicationOutlet):
                 data=payload,
             )
             url = post.get("url", self._client.post_url(self._post_type, slug))
+            post_id = str(post.get("id", ""))
             return OutletResult(
                 outlet=self.name,
                 succeeded=True,
                 artifact=url,
+                metadata={"post_id": post_id} if post_id else {},
             )
         except Exception as exc:
             return OutletResult(

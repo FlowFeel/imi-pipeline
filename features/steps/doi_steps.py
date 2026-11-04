@@ -353,14 +353,25 @@ def step_retract_with_notice(context: Any, notice: str) -> None:
 
 @when("the harness deposits the preprint metadata to the Crossref stub")
 def step_deposit(context: Any) -> None:
-    suffix = context.doi_suffix
-    code, text = _http(
-        "POST",
-        _url(STUB_BASE_URL, "servlet/deposit"),
-        {"doi": f"{_PREFIX}imi.2026.{suffix}"},
-    )
-    context.deposit_code = code
-    context.deposit_response = text
+    from phosphene.imi.crossref import CrossrefXmlBuilder, HttpCrossrefClient
+
+    client = HttpCrossrefClient(STUB_BASE_URL)
+    work = _build_preprint_work(context)
+    target_url = _url(WP_BASE_URL, f"?p={getattr(context, 'preprint_id', 0)}")
+    xml = CrossrefXmlBuilder.build_xml(work, target_url=target_url)
+
+    receipt = client.deposit(xml)
+    context.deposit_code = 201 if (receipt.is_valid or receipt.deposit_id) else 400
+    context.deposit_response = receipt.raw
+    context.crossref_receipt = receipt
+    if receipt.is_valid:
+        _wp_update(
+            context.preprint_id,
+            {
+                "reg_doi_status": "active",
+                "reg_crossref_deposit_id": receipt.deposit_id,
+            },
+        )
 
 
 # ── Then ─────────────────────────────────────────────────────────────────────
