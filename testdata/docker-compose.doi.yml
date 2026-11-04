@@ -1,0 +1,61 @@
+services:
+
+  # ── MariaDB for WordPress ──────────────────────────────────────────────────
+  doi-db:
+    image: mariadb:10.11
+    environment:
+      MARIADB_ROOT_PASSWORD: "testrootpass"
+      MARIADB_DATABASE: imi_registry
+      MARIADB_USER: imi
+      MARIADB_PASSWORD: "testpass"
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+    networks:
+      - doi-net
+
+  # ── WordPress with the imi_registry mu-plugins ─────────────────────────────
+  doi-wp:
+    image: wordpress:6.4-php8.2-apache
+    depends_on:
+      doi-db:
+        condition: service_healthy
+    ports:
+      - "${WP_PORT:-18091}:80"
+    environment:
+      WORDPRESS_DB_HOST: doi-db
+      WORDPRESS_DB_NAME: imi_registry
+      WORDPRESS_DB_USER: imi
+      WORDPRESS_DB_PASSWORD: "testpass"
+      WORDPRESS_DEBUG: "1"
+      CROSSREF_DEPOSIT_URL: http://doi-stub:8000/servlet/deposit
+    volumes:
+      - ./wp-mu-plugins:/var/www/html/wp-content/mu-plugins:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks:
+      - doi-net
+
+  # ── Crossref deposit stub ──────────────────────────────────────────────────
+  doi-stub:
+    build:
+      context: ./crossref-stub
+    ports:
+      - "${STUB_PORT:-18092}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/admin/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - doi-net
+
+networks:
+  doi-net:
+    driver: bridge

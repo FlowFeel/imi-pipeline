@@ -8,6 +8,7 @@ services:
       POSTGRES_DB: temporal
     volumes:
       - temporal-db-test:/var/lib/postgresql/data
+      - ./init-temporal:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "temporal"]
       interval: 5s
@@ -15,26 +16,26 @@ services:
       retries: 10
 
   temporal:
-    image: temporalio/auto-setup:1.23.0
+    image: temporalio/auto-setup:1.22.3
     depends_on:
       temporal-db:
         condition: service_healthy
     environment:
-      DBHOST: temporal-db
-      DBNAME: temporal
-      DB_USER: temporal
-      DB_PWD: temporal
-      LOG_LEVEL: error
+      DB: postgres12
       DB_PORT: "5432"
-      DBTYPE: postgres12
+      POSTGRES_USER: temporal
+      POSTGRES_PWD: temporal
+      POSTGRES_SEEDS: temporal-db
+      DBNAME: temporal
+      LOG_LEVEL: error
     ports:
       - "7233:7233"
     healthcheck:
-      test: ["CMD", "nc", "-z", "localhost", "7233"]
-      interval: 5s
+      test: ["CMD-SHELL", "ps aux | grep temporal-server | grep -v grep || exit 1"]
+      interval: 10s
       timeout: 5s
-      retries: 15
-      start_period: 30s
+      retries: 30
+      start_period: 120s
 
   # ── MW Stack ──
   db:
@@ -51,11 +52,19 @@ services:
       retries: 10
 
   elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.0
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.0
+    security_opt:
+      - seccomp:unconfined
     environment:
       discovery.type: single-node
       ES_JAVA_OPTS: "-Xms256m -Xmx256m"
       xpack.security.enabled: "false"
+      bootstrap.memory_lock: "false"
+      "cluster.routing.allocation.disk.threshold_enabled": "false"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9200"]
       interval: 5s
@@ -64,7 +73,7 @@ services:
       start_period: 30s
 
   web:
-    image: ghcr.io/flowfeel/observatory-mediawiki:2.1.0-observatory
+    image: ghcr.io/flowfeel/observatory-mediawiki:2.1.1-observatory
     depends_on:
       db:
         condition: service_healthy
@@ -85,13 +94,16 @@ services:
     ports:
       - "8085:80"
     volumes:
-      - ./testdata/init:/init:ro
+      - ./init:/init:ro
+      - ./main-stubs/update-docker-gateway.sh:/update-docker-gateway.sh:ro
+      - ./main-stubs/update-images-permissions.sh:/update-images-permissions.sh:ro
+      - ./main-stubs/run-maintenance-scripts.sh:/run-maintenance-scripts.sh:ro
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost/"]
+      test: ["CMD-SHELL", "curl -sf http://localhost/w/api.php || exit 1"]
       interval: 10s
       timeout: 10s
-      start_period: 60s
-      retries: 15
+      start_period: 120s
+      retries: 30
 
 volumes:
   temporal-db-test:

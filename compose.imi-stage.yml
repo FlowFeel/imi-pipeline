@@ -1,0 +1,106 @@
+# IMI Pipeline — Stage Stack
+#
+# Usage:
+#   docker compose -f compose.imi-stage.yml up -d
+#   docker compose -f compose.imi-stage.yml down -v
+#
+# Standalone: does NOT depend on the Observatory compose file.
+# If you want MW as a content source, start it separately and set MW_API_URL:
+#   MW_API_URL=http://host.docker.internal:8085/w/api.php \
+#     docker compose -f compose.imi-stage.yml up -d
+#
+# Build context for worker and api is lib/python/ (one level up from this file).
+# Run from the repo root or override with COMPOSE_FILE.
+
+services:
+
+  # ── PostgreSQL for Temporal metadata ────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: temporal
+      POSTGRES_DB: temporal
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U temporal"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    networks:
+      - imi
+
+  # ── Temporal (PostgreSQL, auto-setup namespace) ─────────────────────────────
+  # No healthcheck: the auto-setup image doesn't include nc/wget/tctl in a
+  # reliable way for CMD-SHELL. Worker and API depend on temporal without
+  # service_healthy condition; they retry-connect via Temporal SDK.
+  temporal:
+    image: temporalio/auto-setup:latest
+    ports:
+      - "7233:7233"   # gRPC — workers + SDK clients connect here
+      - "8233:8233"   # Temporal Web UI
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=temporal
+      - POSTGRES_SEEDS=postgres
+      - SKIP_DEFAULT_NAMESPACE_CREATION=false
+    networks:
+      - imi
+
+  # ── IMI Temporal Worker ───────────────────────────────────────────────────────
+  worker:
+    build:
+      context: .        # lib/python/ — Dockerfile.worker lives inside imi/
+      dockerfile: Dockerfile
+    depends_on:
+      - temporal
+    environment:
+      TEMPORAL_URL: temporal:7233
+      TEMPORAL_NAMESPACE: default
+      IMI_TASK_QUEUE: ${IMI_TASK_QUEUE:-imi-syndication}
+      IMI_CLIENT_MODE: ${IMI_CLIENT_MODE:-fake}
+      IMI_PIPELINE_MODE: ${IMI_PIPELINE_MODE:-stage}
+      # Point at Observatory stage MW if running; defaults to host bridge
+      MW_API_URL: ${MW_API_URL:-http://host.docker.internal:8085/w/api.php}
+    restart: unless-stopped
+    networks:
+      - imi
+
+  # ── IMI Syndication API (same image, different CMD) ───────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      - temporal
+    ports:
+      - "${IMI_API_PORT:-8090}:8090"
+    environment:
+      TEMPORAL_URL: temporal:7233
+      TEMPORAL_NAMESPACE: default
+      IMI_TASK_QUEUE: ${IMI_TASK_QUEUE:-imi-syndication}
+      IMI_CLIENT_MODE: ${IMI_CLIENT_MODE:-fake}
+    command:
+      - "uvicorn"
+      - "phosphene.imi.api:app"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8090"
+    restart: unless-stopped
+    networks:
+      - imi
+
+networks:
+  imi:
+    driver: bridge
+
+volumes:
+  pgdata:

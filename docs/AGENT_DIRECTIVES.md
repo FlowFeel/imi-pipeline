@@ -1,0 +1,73 @@
+# Agent Directives & Developer Guide
+
+## Architecture Overview
+
+`imi-pipeline` orchestrates media syndication across external publishing outlets using Temporal sagas and Behavioral-Driven Development (BDD) contracts.
+
+### Core Outlets
+- **Observatory Magazine** (`observatory.wiki` / MediaWiki)
+- **IMI WordPress** (`independentmediainstitute.org` / CPT `imi_registry`)
+- **Salesforce / Pardot** (Lead distribution & email alerts)
+- **Crossref DOI Minting** (Scholarly DOI prefix `10.67767`, Member 57537)
+
+---
+
+## Testing & CI Architecture
+
+The repository enforces outside-in testing across 5 formal gates:
+
+```
+Gate 1: Lint (Ruff check & format)
+  ├── Gate 2: BDD Contracts (Behave --tags ~@integration) [0.3s, no Docker]
+  └── Gate 3: Unit Tests (Pytest -m "not integration") [3s, 233 passing]
+        └── Gate 5: DOI Harness (WP 6.4 + MariaDB + Crossref Stub) [E2E Docker]
+              └── Summary Gate: ci-pass
+```
+
+### Running Tests Locally
+
+#### 1. Quick Quality Check (No Docker Required)
+```bash
+uv sync --all-extras
+uv run ruff check src/ tests/ features/
+uv run ruff format --check src/ tests/ features/
+uv run behave features/ --tags ~@integration --no-capture
+uv run pytest tests/unit -v --tb=short
+```
+
+#### 2. DOI Preprint Test Harness (Docker Stack)
+The DOI harness is 100% self-contained in `testdata/`. It requires Docker and validates:
+- Search engine safety: pending DOIs omit `<meta name="citation_doi">` to prevent 404 indexing leaks.
+- DOI activation: successful Crossref minting switches status to `active` and renders citation tags.
+- Immutable versions: version increments update metadata without fracturing the base DOI.
+- Structured data: Schema.org `ScholarlyArticle` JSON-LD parity.
+- Retraction tombstones: retracted papers tombstone DOI and notice without deleting the record.
+- Crossref HTTP stub: validates XML deposits, receipt polling, and malformed receipt error recovery.
+
+```bash
+make doi-up     # Boot MariaDB 10.11, WP 6.4, and Crossref Stub; install WP via setup_wp.py
+make doi-test   # Run all 7 scenarios (68 steps) in features/doi_preprint_lifecycle.feature
+make doi-down   # Cleanly stop containers and prune test volumes (-v)
+```
+
+---
+
+## Agent Invariants & Hard Rules
+
+When modifying or extending this pipeline, all agents and contributors must observe these invariants:
+
+1. **Protocol Decoupling (Logic/IO Separation):**
+   - Outlets interact with external services strictly via protocols defined in `src/phosphene/imi/protocols.py`.
+   - Never import direct network clients inside domain activities. Use Fakes in unit tests.
+2. **Deterministic BDD Contracts:**
+   - Any new business requirement begins with a Gherkin feature file in `features/`.
+   - Pure contract features must run without live network dependencies or long timeouts.
+   - Any scenario requiring a live container stack must be annotated `@integration`.
+3. **No 404 Leaks (DOI Safety):**
+   - A preprint in `PENDING` state **must never emit** `<meta name="citation_doi">`.
+   - Google Scholar and scrapers must only receive the citation tag once Crossref has returned an active deposit.
+4. **Clean Docker Teardown:**
+   - When running Docker pipelines, always guarantee teardown using `make doi-down` or `down -v`.
+   - Do not leave dangling containers, networks, or host ports bound on developer machines.
+5. **Linting & Code Formatting:**
+   - Run `uv run ruff check --fix src/ tests/ features/` and `uv run ruff format src/ tests/ features/` prior to every commit.

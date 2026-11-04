@@ -16,3 +16,4 @@ coverage_html/
 *.coverage
 .coverage.*
 uv.lock
+testdata/.wp_app_password

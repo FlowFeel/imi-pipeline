@@ -86,29 +86,29 @@ def services(compose):
 class TestComposeStructure:
     """Validate compose file structure."""
 
-    def test_compose_is_valid_yaml(self):
+    def test_compose_is_valid_yaml(self) -> None:
         """Compose file parses as valid YAML."""
         compose = load_compose()
         assert "services" in compose
 
-    def test_all_services_have_image_or_build(self, services):
+    def test_all_services_have_image_or_build(self, services) -> None:
         """Every service has either image: or build:."""
         for name, svc in services.items():
             assert "image" in svc or "build" in svc, (
                 f"Service '{name}' has neither image nor build"
             )
 
-    def test_explicit_network_declared(self, compose):
+    def test_explicit_network_declared(self, compose) -> None:
         """An explicit bridge network is declared."""
         networks = compose.get("networks", {})
         assert networks, "No explicit networks declared — services may not share DNS"
-        for name, config in networks.items():
+        for _name, config in networks.items():
             if config and config.get("driver") == "bridge":
                 return
         # If no driver specified, Docker defaults to bridge
         assert networks, "No bridge network found"
 
-    def test_all_services_on_same_network(self, services, compose):
+    def test_all_services_on_same_network(self, services, compose) -> None:
         """All services are on the same explicit network."""
         networks = list(compose.get("networks", {}).keys())
         if not networks:
@@ -124,7 +124,7 @@ class TestComposeStructure:
 class TestHealthchecks:
     """Validate healthcheck commands against known image capabilities."""
 
-    def test_no_bashisms_in_healthchecks(self, services):
+    def test_no_bashisms_in_healthchecks(self, services) -> None:
         """No bash-specific features in healthcheck commands."""
         for name, svc in services.items():
             hc = svc.get("healthcheck", {})
@@ -144,7 +144,7 @@ class TestHealthchecks:
                         f"'{bashism}' in healthcheck — alpine images use sh, not bash"
                     )
 
-    def test_healthcheck_tools_exist_in_image(self, services):
+    def test_healthcheck_tools_exist_in_image(self, services) -> None:
         """Healthcheck commands only use tools known to exist in the image."""
         for name, svc in services.items():
             hc = svc.get("healthcheck", {})
@@ -167,7 +167,7 @@ class TestHealthchecks:
                         f"which is not available in alpine images"
                     )
 
-    def test_healthcheck_has_start_period(self, services):
+    def test_healthcheck_has_start_period(self, services) -> None:
         """Services with healthchecks have a start_period for slow starts."""
         for name, svc in services.items():
             hc = svc.get("healthcheck", {})
@@ -185,7 +185,7 @@ class TestHealthchecks:
 class TestTemporalConfig:
     """Validate Temporal-specific configuration."""
 
-    def test_temporal_db_driver_valid(self, services):
+    def test_temporal_db_driver_valid(self, services) -> None:
         """Temporal uses a valid DB driver."""
         temporal = services.get("temporal", {})
         env = temporal.get("environment", [])
@@ -202,7 +202,7 @@ class TestTemporalConfig:
                 f"Valid: {valid_drivers}"
             )
 
-    def test_no_bind_on_ip_without_broadcast(self, services):
+    def test_no_bind_on_ip_without_broadcast(self, services) -> None:
         """BIND_ON_IP=0.0.0.0 requires TEMPORAL_BROADCAST_ADDRESS."""
         temporal = services.get("temporal", {})
         env = temporal.get("environment", [])
@@ -224,29 +224,45 @@ class TestTemporalConfig:
                 f"not a hostname (ringpop rejects DNS names)"
             )
 
-    def test_temporal_depends_on_db(self, services):
+    def test_temporal_depends_on_db(self, services) -> None:
         """Temporal service depends on its database."""
         temporal = services.get("temporal", {})
         deps = temporal.get("depends_on", {})
-        assert deps, "Temporal has no depends_on — will start before DB is ready"
+        # deps can be a list (plain dependency) or dict (with conditions)
+        if isinstance(deps, list):
+            assert "postgres" in deps, "Temporal does not depend on postgres"
+        else:
+            assert deps, "Temporal has no depends_on — will start before DB is ready"
+            assert "postgres" in deps, "Temporal does not depend on postgres"
 
-    def test_workers_depend_on_temporal(self, services):
+    def test_workers_depend_on_temporal(self, services) -> None:
         """Worker and API depend on Temporal."""
         for name in ("worker", "api"):
             svc = services.get(name, {})
             if not svc:
                 continue
             deps = svc.get("depends_on", {})
-            assert "temporal" in deps, f"Service '{name}' does not depend on temporal"
+            # deps can be a list or dict
+            if isinstance(deps, list):
+                assert "temporal" in deps, (
+                    f"Service '{name}' does not depend on temporal"
+                )
+            else:
+                assert "temporal" in deps, (
+                    f"Service '{name}' does not depend on temporal"
+                )
 
 
 class TestDependencyChain:
     """Validate the dependency chain is correct."""
 
-    def test_healthy_dependencies_have_healthcheck(self, services):
+    def test_healthy_dependencies_have_healthcheck(self, services) -> None:
         """If a service depends on X with service_healthy, X must have a healthcheck."""
         for name, svc in services.items():
             deps = svc.get("depends_on", {})
+            # deps can be a list (plain) or dict (with conditions)
+            if isinstance(deps, list):
+                continue  # plain list = no conditions, no healthcheck required
             for dep_name, dep_config in deps.items():
                 if isinstance(dep_config, dict):
                     condition = dep_config.get("condition", "")
