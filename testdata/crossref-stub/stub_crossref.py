@@ -8,8 +8,8 @@ Endpoints
 ---------
 POST /servlet/deposit     Crossref-style XML deposit. Body carries the DOI.
 GET  /deposits/<id>       Receipt lookup: returns deposit record + status.
-POST /admin/script        Script the next deposit response for a DOI suffix.
-                          {"doi_suffix": "050", "mode": "timeout" | "malformed" | "success" | "reject"}
+POST /admin/script        Script next deposit response:
+                          {"doi_suffix": "050", "mode": "timeout"|"malformed"|...}
 POST /admin/reset         Wipe all state between scenarios.
 GET  /admin/health        Liveness for docker healthcheck.
 
@@ -60,7 +60,7 @@ class _Stub(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     # ── Crossref-style deposit ──
-    def do_POST(self) -> None:  # noqa: N802
+    def do_POST(self) -> None:
         length = int(self.headers.get("Content-Length") or 0)
         raw = self.rfile.read(length).decode("utf-8", errors="replace")
 
@@ -126,8 +126,7 @@ class _Stub(BaseHTTPRequestHandler):
             # 201 but the receipt omits <doi> — plugin must not trust it.
             self._xml(
                 201,
-                "<deposit_receipt><cr-dep-id>"
-                f"{dep_id}</cr-dep-id></deposit_receipt>",
+                f"<deposit_receipt><cr-dep-id>{dep_id}</cr-dep-id></deposit_receipt>",
             )
             return
 
@@ -141,7 +140,7 @@ class _Stub(BaseHTTPRequestHandler):
         )
 
     # ── receipt lookup / health ──
-    def do_GET(self) -> None:  # noqa: N802
+    def do_GET(self) -> None:
         if self.path == "/admin/health":
             self._json(200, {"ok": True})
             return
@@ -164,5 +163,5 @@ _SCRIPTED: dict[str, str] = {}
 
 if __name__ == "__main__":
     server = ThreadingHTTPServer(("0.0.0.0", PORT), _Stub)
-    print(f"crossref stub listening on :{PORT}")  # noqa: T201
+    print(f"crossref stub listening on :{PORT}")
     server.serve_forever()

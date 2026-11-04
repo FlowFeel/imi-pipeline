@@ -69,11 +69,14 @@ def main() -> int:
 
     # Install wp-cli
     print("Installing wp-cli...")
+    wp_cli_url = (
+        "https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar"
+    )
     _docker_exec(
         container,
         "bash",
         "-c",
-        "curl -sL https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar -o /usr/local/bin/wp && chmod +x /usr/local/bin/wp",
+        f"curl -sL {wp_cli_url} -o /usr/local/bin/wp && chmod +x /usr/local/bin/wp",
     )
 
     # Core install
@@ -84,8 +87,8 @@ def main() -> int:
         "-c",
         f"wp core is-installed --allow-root 2>/dev/null || "
         f"wp core install --url='{URL}' --title='IMI Registry Harness' "
-        f"--admin_user=ci_admin --admin_password=ci_admin_pass_2026 --admin_email=ci@test.com "
-        f"--skip-email --allow-root",
+        f"--admin_user=ci_admin --admin_password=ci_admin_pass_2026 "
+        f"--admin_email=ci@test.com --skip-email --allow-root",
     )
 
     # Permalinks
@@ -103,11 +106,15 @@ def main() -> int:
         container,
         "bash",
         "-c",
-        "wp user application-password create ci_admin bdd-gateway --porcelain --allow-root 2>&1",
+        "wp user application-password create ci_admin bdd-gateway "
+        "--porcelain --allow-root 2>&1",
     )
     password = out.strip().split("\n")[-1].strip().replace(" ", "")
     CRED_FILE.write_text(f"ci_admin:{password}\n")
-    print(f"Application password generated ({len(password)} chars), stored to {CRED_FILE.name}")
+    print(
+        f"Application password generated ({len(password)} chars), "
+        f"stored to {CRED_FILE.name}"
+    )
 
     print("WordPress setup complete.")
     return 0

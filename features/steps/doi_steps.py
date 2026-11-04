@@ -23,10 +23,15 @@ WP_BASE_URL = os.environ.get("WP_BASE_URL", "http://localhost:18091")
 STUB_BASE_URL = os.environ.get("CROSSREF_STUB_URL", "http://localhost:18092")
 
 _PREFIX = "10.67767/"
-_CRED_FILE = pathlib.Path(__file__).resolve().parent.parent.parent / "testdata" / ".wp_app_password"
+_CRED_FILE = (
+    pathlib.Path(__file__).resolve().parent.parent.parent
+    / "testdata"
+    / ".wp_app_password"
+)
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
+
 
 def _url(base: str, path: str) -> str:
     return f"{base.rstrip('/')}/{path.lstrip('/')}"
@@ -56,7 +61,9 @@ def _http(method: str, url: str, body: dict[str, Any] | None = None) -> tuple[in
         return exc.code, exc.read().decode()
 
 
-def _wp_create(title: str, doi_suffix: str, status: str, extra: dict[str, Any] | None = None) -> int:
+def _wp_create(
+    title: str, doi_suffix: str, status: str, extra: dict[str, Any] | None = None
+) -> int:
     """Create a preprint CPT entry through the WP REST API."""
     meta: dict[str, Any] = {
         "reg_doi": f"{_PREFIX}{doi_suffix}" if doi_suffix else "",
@@ -87,7 +94,9 @@ def _wp_update(post_id: int, meta: dict[str, Any]) -> None:
 
 
 def _wp_meta(post_id: int) -> dict[str, Any]:
-    code, text = _http("GET", _url(WP_BASE_URL, f"wp-json/wp/v2/imi_registry/{post_id}"))
+    code, text = _http(
+        "GET", _url(WP_BASE_URL, f"wp-json/wp/v2/imi_registry/{post_id}")
+    )
     if code != 200:
         raise AssertionError(f"WP read failed [{code}]: {text}")
     return json.loads(text).get("meta", {})
@@ -102,6 +111,7 @@ def _rendered_page(post_id: int) -> str:
 
 
 # ── Given ────────────────────────────────────────────────────────────────────
+
 
 @given("the DOI harness stack is running")
 def step_stack_running(context: Any) -> None:
@@ -191,18 +201,23 @@ def step_script_stub(context: Any, mode: str, suffix: str) -> None:
 
 # ── When ─────────────────────────────────────────────────────────────────────
 
+
 @when("Flow generates the Google Scholar citation tags")
 def step_render_citation_tags(context: Any) -> None:
     if not getattr(context, "preprint_id", None):
         meta: dict[str, Any] = {
-            "reg_doi": f"{_PREFIX}imi.2026.{context.doi_suffix}" if context.doi_suffix else "",
+            "reg_doi": f"{_PREFIX}imi.2026.{context.doi_suffix}"
+            if context.doi_suffix
+            else "",
             "reg_doi_status": context.doi_status,
             "reg_version": getattr(context, "version_number", 1),
             "reg_author": getattr(context, "primary_author", "Default Author"),
         }
         if getattr(context, "deposit_id", None):
             meta["reg_crossref_deposit_id"] = context.deposit_id
-            meta["reg_doi_url"] = f"https://doi.org/{_PREFIX}imi.2026.{context.doi_suffix}"
+            meta["reg_doi_url"] = (
+                f"https://doi.org/{_PREFIX}imi.2026.{context.doi_suffix}"
+            )
         context.preprint_id = _wp_create(
             context.preprint_title,
             f"imi.2026.{context.doi_suffix}",
@@ -219,11 +234,15 @@ def step_render_jsonld(context: Any) -> None:
     if not getattr(context, "preprint_id", None):
         coauth_lines = "\n".join(getattr(context, "coauthors", []))
         meta: dict[str, Any] = {
-            "reg_doi": f"{_PREFIX}imi.2026.{context.doi_suffix}" if context.doi_suffix else "",
+            "reg_doi": f"{_PREFIX}imi.2026.{context.doi_suffix}"
+            if context.doi_suffix
+            else "",
             "reg_doi_status": context.doi_status,
             "reg_author_name": getattr(context, "primary_author", "Default Author"),
             "reg_coauthors": coauth_lines,
-            "reg_pipeline_status": "preprint" if getattr(context, "editorial_state", "LIVE_PREPRINT") == "LIVE_PREPRINT" else "draft",
+            "reg_pipeline_status": "preprint"
+            if getattr(context, "editorial_state", "LIVE_PREPRINT") == "LIVE_PREPRINT"
+            else "draft",
         }
         context.preprint_id = _wp_create(
             context.preprint_title,
@@ -296,6 +315,7 @@ def step_deposit(context: Any) -> None:
 
 # ── Then ─────────────────────────────────────────────────────────────────────
 
+
 @then('the JSON-LD "{key}" is "{value}"')
 def step_jsonld_is(context: Any, key: str, value: str) -> None:
     # If JSON-LD has not been fetched yet in this scenario, fetch from rendered page
@@ -312,9 +332,13 @@ def step_jsonld_is(context: Any, key: str, value: str) -> None:
 @then('the citation output contains a "{tag}" tag with "{value}"')
 def step_citation_contains(context: Any, tag: str, value: str) -> None:
     # If citation tags have not been fetched yet, fetch from rendered page
-    if not getattr(context, "citation_tags", None) and getattr(context, "preprint_id", None):
+    if not getattr(context, "citation_tags", None) and getattr(
+        context, "preprint_id", None
+    ):
         html = _rendered_page(context.preprint_id)
-        tags = dict(re.findall(r'<meta name="(citation_[a-z_]+)" content="([^"]*)"', html))
+        tags = dict(
+            re.findall(r'<meta name="(citation_[a-z_]+)" content="([^"]*)"', html)
+        )
         context.citation_tags = tags
     tags = getattr(context, "citation_tags", {})
     assert tags.get(tag) == value, f"{tag}={tags.get(tag)!r}, expected {value!r}"
@@ -322,9 +346,13 @@ def step_citation_contains(context: Any, tag: str, value: str) -> None:
 
 @then('the citation output does not contain a "{tag}" tag')
 def step_citation_absent(context: Any, tag: str) -> None:
-    if not getattr(context, "citation_tags", None) and getattr(context, "preprint_id", None):
+    if not getattr(context, "citation_tags", None) and getattr(
+        context, "preprint_id", None
+    ):
         html = _rendered_page(context.preprint_id)
-        tags = dict(re.findall(r'<meta name="(citation_[a-z_]+)" content="([^"]*)"', html))
+        tags = dict(
+            re.findall(r'<meta name="(citation_[a-z_]+)" content="([^"]*)"', html)
+        )
         context.citation_tags = tags
     tags = getattr(context, "citation_tags", {})
     assert tag not in tags, f"unexpected {tag}={tags[tag]!r} — 404-leak risk"
@@ -346,7 +374,9 @@ def step_post_meta_str(context: Any, key: str, value: str) -> None:
 @then('the post meta "{key}" is {value:d}')
 def step_post_meta_int(context: Any, key: str, value: int) -> None:
     meta = _wp_meta(context.preprint_id)
-    assert int(meta.get(key) or 0) == value, f"meta[{key}]={meta.get(key)!r}, expected {value}"
+    assert int(meta.get(key) or 0) == value, (
+        f"meta[{key}]={meta.get(key)!r}, expected {value}"
+    )
 
 
 @then('the stub returns a deposit receipt with a "cr-dep-" id')
@@ -365,7 +395,7 @@ def step_receipt_status(context: Any) -> None:
     assert json.loads(text)["status"] == "pending", text
 
 
-@then('the harness records a malformed-receipt error and does not activate the DOI')
+@then("the harness records a malformed-receipt error and does not activate the DOI")
 def step_malformed_rejected(context: Any) -> None:
     meta = _wp_meta(context.preprint_id)
     assert meta.get("reg_doi_status") != "active", "malformed receipt activated DOI"
