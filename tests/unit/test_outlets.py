@@ -8,12 +8,21 @@ OKR: @okr_publish_pipeline
 
 from __future__ import annotations
 
+from phosphene.imi_wordpress.domain import (
+    DOI,
+    Author,
+    DOIRecord,
+    DOIStatus,
+    EditorialState,
+)
+
 from phosphene.imi.draft import Draft
 from phosphene.imi.event import PublicationEvent
 from phosphene.imi.fakes import FakeMWClient, FakeSFClient, FakeWPClient
 from phosphene.imi.outlets.observatory import ObservatoryOutlet
 from phosphene.imi.outlets.salesforce import SalesforceOutlet
 from phosphene.imi.outlets.wordpress import WordPressOutlet
+from phosphene.imi.work import ArticleDraft, PreprintWork
 
 
 def make_event(**kwargs: object) -> PublicationEvent:
@@ -179,6 +188,59 @@ class TestWordPressOutlet:
         result = outlet.publish(make_event())
         assert result.succeeded is False
         assert "WP REST API unavailable" in (result.error or "")
+
+    def test_publish_preprint_work_populates_cpt_scholarly_meta(self) -> None:
+        """Publishing a PreprintWork dispatches to PreprintPayloadAdapter with 39 CPT fields."""
+        client = FakeWPClient()
+        outlet = WordPressOutlet(client=client)
+        preprint = PreprintWork(
+            title="Global Economic Trends and Preprints",
+            primary_author=Author(
+                name="Gunnar Rundgren",
+                orcid="0000-0002-1825-0097",
+                affiliation="Independent Scholar",
+                country="Sweden",
+            ),
+            abstract="An empirical study of economic systems.",
+            doi_record=DOIRecord(
+                doi=DOI.from_string("10.5555/imi.2026.001"),
+                status=DOIStatus.ACTIVE,
+                minted_date="2026-11-04",
+            ),
+            editorial_state=EditorialState.LIVE_PREPRINT,
+            keywords=["Economics", "Agriculture"],
+        )
+        event = PublicationEvent(work=preprint, publisher_id="jan")
+        result = outlet.publish(event)
+
+        assert result.succeeded is True
+        assert result.artifact is not None
+        post = client.posts[("imi_registry", preprint.slug)]
+        assert post["title"] == "Global Economic Trends and Preprints"
+        assert post["status"] == "publish"
+        meta = post["meta"]
+        assert meta["reg_author_name"] == "Gunnar Rundgren"
+        assert meta["reg_orcid"] == "0000-0002-1825-0097"
+        assert meta["reg_doi"] == "10.5555/imi.2026.001"
+        assert meta["reg_doi_status"] == "active"
+        assert meta["reg_pipeline_status"] == "preprint"
+        assert meta["reg_keywords"] == "Economics, Agriculture"
+
+    def test_publish_preprint_work_is_idempotent(self) -> None:
+        """Publishing the same PreprintWork twice skips recreation."""
+        client = FakeWPClient()
+        outlet = WordPressOutlet(client=client)
+        preprint = PreprintWork(
+            title="Idempotent Preprint Publication",
+            primary_author=Author(name="Test Scholar"),
+        )
+        event = PublicationEvent(work=preprint, publisher_id="flow")
+        res1 = outlet.publish(event)
+        res2 = outlet.publish(event)
+        assert res1.succeeded is True
+        assert res2.succeeded is True
+        assert res2.metadata.get("idempotent") == "true"
+        assert len(client.posts) == 1
 
 
 class TestSalesforceOutlet:

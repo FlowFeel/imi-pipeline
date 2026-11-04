@@ -18,6 +18,19 @@ import urllib.request
 from typing import Any
 
 from behave import given, then, when
+from phosphene.imi_wordpress.adapters import PreprintPayloadAdapter
+from phosphene.imi_wordpress.domain import (
+    DOI,
+    Author,
+    DOIRecord,
+    DOIStatus,
+    EditorialState,
+    VersionInfo,
+)
+
+from phosphene.imi.event import PublicationEvent
+from phosphene.imi.outlets.wordpress import WordPressOutlet
+from phosphene.imi.work import PreprintWork
 
 WP_BASE_URL = os.environ.get("WP_BASE_URL", "http://localhost:18091")
 STUB_BASE_URL = os.environ.get("CROSSREF_STUB_URL", "http://localhost:18092")
@@ -110,6 +123,97 @@ def _rendered_page(post_id: int) -> str:
     return text
 
 
+class HttpWPClient:
+    """WPClientProtocol implementation communicating with live WordPress instance."""
+
+    def __init__(self, base_url: str) -> None:
+        self._base_url = base_url
+        self.last_created_post: dict[str, Any] | None = None
+
+    def create_post(
+        self,
+        post_type: str,
+        data: dict[str, Any],
+    ) -> dict[str, Any]:
+        code, text = _http(
+            "POST", _url(self._base_url, f"wp-json/wp/v2/{post_type}"), data
+        )
+        if code not in (200, 201):
+            raise AssertionError(f"WP create failed [{code}]: {text}")
+        post = json.loads(text)
+        self.last_created_post = post
+        return post
+
+    def post_exists(self, post_type: str, slug: str) -> bool:
+        return False
+
+    def post_url(self, post_type: str, slug: str) -> str:
+        return _url(self._base_url, f"?p={slug}")
+
+    def delete_post(self, post_url: str) -> None:
+        pass
+
+
+def _build_preprint_work(context: Any) -> PreprintWork:
+    """Construct pure PreprintWork domain POPO from test scenario context."""
+    suffix = getattr(context, "doi_suffix", "")
+    doi = DOI(suffix=f"imi.2026.{suffix}") if suffix else None
+
+    raw_status = getattr(context, "doi_status", "pending").lower()
+    status_map = {
+        "pending": DOIStatus.PENDING,
+        "active": DOIStatus.ACTIVE,
+        "withdrawn": DOIStatus.WITHDRAWN,
+    }
+    doi_status = status_map.get(raw_status, DOIStatus.PENDING)
+
+    doi_record = DOIRecord(
+        doi=doi,
+        status=doi_status,
+        deposit_id=getattr(context, "deposit_id", ""),
+        minted_date="2026-11-04" if doi_status == DOIStatus.ACTIVE else "",
+    )
+
+    state_map = {
+        "LIVE_PREPRINT": EditorialState.LIVE_PREPRINT,
+        "PUBLISHED": EditorialState.PUBLISHED,
+        "RETRACTED": EditorialState.WITHDRAWN,
+        "WITHDRAWN": EditorialState.WITHDRAWN,
+    }
+    editorial_state = state_map.get(
+        getattr(context, "editorial_state", "LIVE_PREPRINT"),
+        EditorialState.WITHDRAWN
+        if doi_status == DOIStatus.WITHDRAWN
+        else EditorialState.LIVE_PREPRINT,
+    )
+
+    primary_author = Author(name=getattr(context, "primary_author", "Default Author"))
+    coauthors = [Author(name=name) for name in getattr(context, "coauthors", [])]
+    version = VersionInfo(number=getattr(context, "version_number", 1))
+
+    return PreprintWork(
+        title=context.preprint_title,
+        primary_author=primary_author,
+        coauthors=coauthors,
+        doi_record=doi_record,
+        version=version,
+        pdf_url=getattr(context, "pdf_url", ""),
+        withdrawal_notice=getattr(context, "withdrawal_notice", None),
+        editorial_state=editorial_state,
+    )
+
+
+def _publish_work_via_outlet(work: PreprintWork) -> int:
+    """Publish a PreprintWork via WordPressOutlet and return the post id."""
+    client = HttpWPClient(WP_BASE_URL)
+    outlet = WordPressOutlet(client=client)
+    event = PublicationEvent(work=work, publisher_id="flow")
+    result = outlet.publish(event)
+    if not result.succeeded or not client.last_created_post:
+        raise AssertionError(f"WordPressOutlet publish failed: {result.error}")
+    return int(client.last_created_post["id"])
+
+
 # ── Given ────────────────────────────────────────────────────────────────────
 
 
@@ -185,7 +289,8 @@ def step_published_preprint(context: Any, title: str, suffix: str) -> None:
     context.preprint_title = title
     context.doi_suffix = sfx
     context.doi_status = "pending"
-    context.preprint_id = _wp_create(title, sfx, "pending")
+    work = _build_preprint_work(context)
+    context.preprint_id = _publish_work_via_outlet(work)
 
 
 @given('the Crossref stub is scripted to return "{mode}" for suffix "{suffix}"')
@@ -205,25 +310,8 @@ def step_script_stub(context: Any, mode: str, suffix: str) -> None:
 @when("Flow generates the Google Scholar citation tags")
 def step_render_citation_tags(context: Any) -> None:
     if not getattr(context, "preprint_id", None):
-        meta: dict[str, Any] = {
-            "reg_doi": f"{_PREFIX}imi.2026.{context.doi_suffix}"
-            if context.doi_suffix
-            else "",
-            "reg_doi_status": context.doi_status,
-            "reg_version": getattr(context, "version_number", 1),
-            "reg_author": getattr(context, "primary_author", "Default Author"),
-        }
-        if getattr(context, "deposit_id", None):
-            meta["reg_crossref_deposit_id"] = context.deposit_id
-            meta["reg_doi_url"] = (
-                f"https://doi.org/{_PREFIX}imi.2026.{context.doi_suffix}"
-            )
-        context.preprint_id = _wp_create(
-            context.preprint_title,
-            f"imi.2026.{context.doi_suffix}",
-            context.doi_status,
-            {"meta": meta},
-        )
+        work = _build_preprint_work(context)
+        context.preprint_id = _publish_work_via_outlet(work)
     html = _rendered_page(context.preprint_id)
     tags = dict(re.findall(r'<meta name="(citation_[a-z_]+)" content="([^"]*)"', html))
     context.citation_tags = tags
@@ -232,24 +320,8 @@ def step_render_citation_tags(context: Any) -> None:
 @when("Flow generates the Schema.org JSON-LD")
 def step_render_jsonld(context: Any) -> None:
     if not getattr(context, "preprint_id", None):
-        coauth_lines = "\n".join(getattr(context, "coauthors", []))
-        meta: dict[str, Any] = {
-            "reg_doi": f"{_PREFIX}imi.2026.{context.doi_suffix}"
-            if context.doi_suffix
-            else "",
-            "reg_doi_status": context.doi_status,
-            "reg_author_name": getattr(context, "primary_author", "Default Author"),
-            "reg_coauthors": coauth_lines,
-            "reg_pipeline_status": "preprint"
-            if getattr(context, "editorial_state", "LIVE_PREPRINT") == "LIVE_PREPRINT"
-            else "draft",
-        }
-        context.preprint_id = _wp_create(
-            context.preprint_title,
-            f"imi.2026.{context.doi_suffix}",
-            context.doi_status,
-            {"meta": meta},
-        )
+        work = _build_preprint_work(context)
+        context.preprint_id = _publish_work_via_outlet(work)
     html = _rendered_page(context.preprint_id)
     match = re.search(
         r'<script type="application/ld\+json">(.*?)</script>', html, re.DOTALL
@@ -259,33 +331,13 @@ def step_render_jsonld(context: Any) -> None:
 
 @when("Flow publishes the preprint via WordPressOutlet")
 def step_publish_via_outlet(context: Any) -> None:
-    pipeline_status = "preprint"
-    if getattr(context, "doi_status", "") == "withdrawn":
-        pipeline_status = "withdrawn"
-    meta: dict[str, Any] = {
-        "reg_doi": f"{_PREFIX}imi.2026.{context.doi_suffix}",
-        "reg_doi_status": context.doi_status,
-        "reg_author_name": getattr(context, "primary_author", "Default Author"),
-        "reg_version": getattr(context, "version_number", 1),
-        "reg_pipeline_status": pipeline_status,
-    }
-    if getattr(context, "pdf_url", None):
-        meta["reg_pdf_url"] = context.pdf_url
-    if getattr(context, "deposit_id", None):
-        meta["reg_crossref_deposit_id"] = context.deposit_id
-        meta["reg_doi_url"] = f"https://doi.org/{_PREFIX}imi.2026.{context.doi_suffix}"
-    if getattr(context, "withdrawal_notice", None):
-        meta["reg_withdrawal_notice"] = context.withdrawal_notice
-
+    work = _build_preprint_work(context)
     if getattr(context, "preprint_id", None):
-        _wp_update(context.preprint_id, meta)
+        entry = work.to_preprint_entry()
+        payload = PreprintPayloadAdapter.to_wordpress(entry)
+        _wp_update(context.preprint_id, payload["meta"])
     else:
-        context.preprint_id = _wp_create(
-            context.preprint_title,
-            f"imi.2026.{context.doi_suffix}",
-            context.doi_status,
-            {"meta": meta},
-        )
+        context.preprint_id = _publish_work_via_outlet(work)
 
 
 @when('the preprint is revised to version {version:d} with PDF artifact "{pdf_url}"')

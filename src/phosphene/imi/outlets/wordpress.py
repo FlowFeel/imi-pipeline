@@ -17,10 +17,13 @@ OKR: @okr_publish_pipeline
 
 from __future__ import annotations
 
+from phosphene.imi_wordpress.adapters import PreprintPayloadAdapter
+
 from phosphene.imi.event import OutletResult, PublicationEvent
 from phosphene.imi.formatters import WordPressPostFormatter
 from phosphene.imi.outlets.base import PublicationOutlet
 from phosphene.imi.protocols import WPClientProtocol
+from phosphene.imi.work import ArticleDraft, PreprintWork
 
 
 class WordPressOutlet(PublicationOutlet):
@@ -70,16 +73,24 @@ class WordPressOutlet(PublicationOutlet):
         Returns:
             OutletResult with succeeded=True and artifact=entry_url.
         """
-        draft = event.draft
-        slug = draft.slug
+        work = event.work
+        slug = work.slug
         try:
             # Concern 1: I/O — check existence
             if self._client.post_exists(self._post_type, slug):
                 # Concern 2: Idempotency decision — pure
                 return self._idempotent_result(self._post_type, slug)
 
-            # Concern 3: Payload construction — pure
-            payload = self._formatter.format_payload(draft)
+            # Concern 3: Payload construction — pure pattern matching
+            match work:
+                case PreprintWork():
+                    payload = dict(
+                        PreprintPayloadAdapter.to_wordpress(work.to_preprint_entry())
+                    )
+                case ArticleDraft():
+                    payload = self._formatter.format_payload(work)
+                case _:
+                    payload = self._formatter.format_payload(event.draft)
 
             # Concern 4: I/O — create post
             post = self._client.create_post(

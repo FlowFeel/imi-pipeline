@@ -198,6 +198,58 @@ class TestWordPressPayload:
         assert slug == slug.lower()
         assert " " not in slug
 
+    def test_preprint_work_publishes_scholarly_cpt_payload(
+        self, wp_mock_server: tuple[Any, int]
+    ) -> None:
+        """WordPressOutlet dispatches PreprintWork with full 39 CPT fields to mock."""
+        from phosphene.imi_wordpress.domain import (
+            DOI,
+            Author,
+            DOIRecord,
+            DOIStatus,
+            EditorialState,
+        )
+
+        from phosphene.imi.event import PublicationEvent
+        from phosphene.imi.outlets.wordpress import WordPressOutlet
+        from phosphene.imi.work import PreprintWork
+
+        app, port = wp_mock_server
+        client = _MockWPClient(f"http://127.0.0.1:{port}")
+        outlet = WordPressOutlet(client=client)
+        preprint = PreprintWork(
+            title="Agrarian Systems and Preprints",
+            primary_author=Author(
+                name="Gunnar Rundgren",
+                orcid="0000-0002-1825-0097",
+                affiliation="Independent Researcher",
+                country="Sweden",
+            ),
+            abstract="Study of agriculture.",
+            doi_record=DOIRecord(
+                doi=DOI.from_string("10.67767/imi.2026.042"),
+                status=DOIStatus.ACTIVE,
+                deposit_id="cr-dep-9912",
+            ),
+            editorial_state=EditorialState.LIVE_PREPRINT,
+            keywords=["Agriculture", "Degrowth"],
+        )
+        event = PublicationEvent(work=preprint, publisher_id="flow")
+        result = outlet.publish(event)
+
+        assert result.succeeded is True
+        payload = _get_last_request(port)
+        assert payload["title"] == "Agrarian Systems and Preprints"
+        assert payload["status"] == "publish"
+        meta = payload["meta"]
+        assert meta["reg_author_name"] == "Gunnar Rundgren"
+        assert meta["reg_orcid"] == "0000-0002-1825-0097"
+        assert meta["reg_doi"] == "10.67767/imi.2026.042"
+        assert meta["reg_doi_status"] == "active"
+        assert meta["reg_crossref_deposit_id"] == "cr-dep-9912"
+        assert meta["reg_pipeline_status"] == "preprint"
+        assert meta["reg_keywords"] == "Agriculture, Degrowth" 
+
 
 class TestWordPressFormatterContract:
     """T-361 — WordPressPostFormatter produces payloads consistent with WordPressOutlet.
