@@ -13,6 +13,7 @@ dependencies = [
     "temporalio>=1.6",
     "mwclient>=0.11.0",
     "phosphene-temporal",
+    "imi-wordpress",
 ]
 
 [tool.uv.workspace]
@@ -20,6 +21,7 @@ members = ["lib/temporal"]
 
 [tool.uv.sources]
 phosphene-temporal = { workspace = true }
+imi-wordpress = { path = "../imi-wordpress", editable = true }
 
 [project.optional-dependencies]
 dev = [
@@ -35,6 +37,7 @@ packages = ["src/phosphene"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+pythonpath = ["src", "tests/integration"]
 markers = [
     "integration: requires Docker or live services — skip with -m 'not integration'",
 ]

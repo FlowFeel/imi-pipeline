@@ -31,10 +31,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from dataclasses import field as dc_field
 from datetime import UTC, datetime
+from typing import Any
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
-from phosphene.imi.draft import Draft, InvariantStatic
+from phosphene.imi.work import ArticleDraft, Draft, InvariantStatic, PublicationWork
 
 
 class PublicationEvent(InvariantStatic):
@@ -44,24 +45,54 @@ class PublicationEvent(InvariantStatic):
     Outlets read the event; they do not modify it.
 
     Attributes:
-        draft: The article to be published.
+        work: The publication work (ArticleDraft or PreprintWork) to be published.
         publisher_id: Identifier of the agent initiating publish (e.g. 'jan', 'flow').
         timestamp: When the event was created. Defaults to now (UTC).
-        idempotency_key: Stable key for deduplication. Defaults to draft title slug.
+        idempotency_key: Stable key for deduplication. Defaults to work title slug.
     """
 
-    draft: Draft
+    work: PublicationWork
     publisher_id: str
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
     idempotency_key: str | None = None
 
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_payload(cls, data: Any) -> Any:
+        """Allow legacy callers to pass  instead of ."""
+        if isinstance(data, dict):
+            if "draft" in data and "work" not in data:
+                data = dict(data)
+                data["work"] = data.pop("draft")
+        return data
+
+    @property
+    def draft(self) -> ArticleDraft:
+        """Backward-compatible accessor returning an ArticleDraft view.
+
+        If the underlying work is an ArticleDraft, returns it directly.
+        If it is a PreprintWork, returns its unidirectional article view projection.
+        """
+        if isinstance(self.work, ArticleDraft):
+            return self.work
+        return self.work.to_article_view()
+
+    def model_copy(
+        self, *, update: dict[str, Any] | None = None, deep: bool = False
+    ) -> PublicationEvent:
+        """Support legacy model_copy(update={"draft": ...})."""
+        if update and "draft" in update and "work" not in update:
+            update = dict(update)
+            update["work"] = update.pop("draft")
+        return super().model_copy(update=update, deep=deep)
+
     def model_post_init(self, __context: object) -> None:
-        """Set idempotency key from draft title if not provided."""
+        """Set idempotency key from work title if not provided."""
         if self.idempotency_key is None:
             object.__setattr__(
                 self,
                 "idempotency_key",
-                self.draft.title.lower().replace(" ", "-")[:80],
+                self.work.title.lower().replace(" ", "-")[:80],
             )
 
 

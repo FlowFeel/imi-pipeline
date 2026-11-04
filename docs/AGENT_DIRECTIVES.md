@@ -71,3 +71,11 @@ When modifying or extending this pipeline, all agents and contributors must obse
    - Do not leave dangling containers, networks, or host ports bound on developer machines.
 5. **Linting & Code Formatting:**
    - Run `uv run ruff check --fix src/ tests/ features/` and `uv run ruff format src/ tests/ features/` prior to every commit.
+
+6. **The PublicationWork Discriminated Union Meta-Model:**
+   - All publication works must be modeled as an algebraic sum type (`PublicationWork = ArticleDraft | PreprintWork`).
+   - Never pass raw metadata dictionaries or untyped property bags across pipeline boundaries.
+   - Never add scholarly registry fields to `ArticleDraft` as hollow optional fields.
+   - Use explicit promotion (`promote_to_preprint`) to elevate an editorial draft into an immutable scholarly record.
+   - Use unidirectional projections (`PreprintWork.to_article_view()`) to project scholarly works into the editorial wiki interface.
+   - See [docs/META_MODEL_PUBLICATION_WORK.md](META_MODEL_PUBLICATION_WORK.md) for full architectural rationale.
