@@ -79,3 +79,10 @@ When modifying or extending this pipeline, all agents and contributors must obse
    - Use explicit promotion (`promote_to_preprint`) to elevate an editorial draft into an immutable scholarly record.
    - Use unidirectional projections (`PreprintWork.to_article_view()`) to project scholarly works into the editorial wiki interface.
    - See [docs/META_MODEL_PUBLICATION_WORK.md](META_MODEL_PUBLICATION_WORK.md) for full architectural rationale.
+
+7. **Separation of Data Manipulation from Text Rendering:**
+   - Pure domain models, resolvers, and wire adapters MUST NOT assemble raw HTML strings, wikitext templates, or manual CSV concatenations.
+   - Domain adapters must emit typed intermediate representations (e.g. `list[MetaTag]`, `Mapping[str, str]`).
+   - All string formatting, HTML escaping, wikitext templating, delimiter joining, and regex parsing must reside in domain-agnostic `phosphene.utils` (Python) and `Phosphene\Utils` (PHP) submodules.
+   - All regular expressions must be precompiled (`re.compile`) at module initialization.
+   - See [docs/SEPARATION_DATA_MANIPULATION_TEXT_RENDERING.md](SEPARATION_DATA_MANIPULATION_TEXT_RENDERING.md) for full architectural rationale.
