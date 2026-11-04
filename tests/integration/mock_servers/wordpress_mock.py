@@ -55,6 +55,21 @@ def create_wordpress_mock_app() -> Flask:
             }
         ), 201
 
+    @app.route("/wp-json/wp/v2/imi_registry/<int:post_id>", methods=["POST"])
+    def update_post(post_id: int) -> tuple[Response, int]:
+        """Update an existing imi_registry post — returns updated post data."""
+        body = request.get_json(force=True, silent=True) or {}
+        _last_request.clear()
+        _last_request.update(body)
+        return jsonify(
+            {
+                "id": post_id,
+                "status": body.get("status", "publish"),
+                "type": "imi_registry",
+                "meta": body.get("meta", {}),
+            }
+        ), 200
+
     @app.route("/last-request", methods=["GET"])
     def last_request() -> Response:
         """Inspection endpoint — returns the last received request body."""

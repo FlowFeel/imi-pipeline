@@ -54,8 +54,8 @@ class WPClientProtocol(Protocol):
     """Minimal WordPress REST API interface required by WordPressOutlet.
 
     Defines the WP operations needed: create a post of a given type,
-    check if a post already exists by slug, get a post URL,
-    and delete a post (for saga compensation).
+    update a post by ID, check if a post already exists by slug, get a
+    post URL, and delete a post (for saga compensation).
     """
 
     def create_post(
@@ -64,6 +64,15 @@ class WPClientProtocol(Protocol):
         data: dict[str, Any],
     ) -> dict[str, Any]:
         """Create a WordPress post. Returns the created post data."""
+        ...
+
+    def update_post(
+        self,
+        post_type: str,
+        post_id: int,
+        data: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Update a WordPress post. Returns the updated post data."""
         ...
 
     def post_exists(self, post_type: str, slug: str) -> bool:
@@ -128,4 +137,17 @@ class PardotClientProtocol(Protocol):
         recipients: list[dict] | None = None,
     ) -> list:
         """Send pipeline notification emails. Returns list of send results."""
+        ...
+
+
+@runtime_checkable
+class CrossrefClientProtocol(Protocol):
+    """Minimal Crossref API interface required for deposit and receipt polling."""
+
+    def deposit(self, xml_payload: str) -> Any:
+        """Submit an XML deposit to Crossref. Returns CrossrefReceipt."""
+        ...
+
+    def get_deposit_status(self, deposit_id: str) -> Any:
+        """Query the status of an existing deposit."""
         ...

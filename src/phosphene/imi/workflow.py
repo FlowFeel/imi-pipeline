@@ -26,7 +26,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from datetime import timedelta
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
@@ -34,6 +34,8 @@ from temporalio.common import RetryPolicy
 with workflow.unsafe.imports_passed_through():
     from phosphene.imi.request import (
         OutletOutcome,
+        PreprintDepositRequest,
+        PreprintDepositResult,
         SyndicationRequest,
         SyndicationResult,
     )
@@ -187,3 +189,125 @@ class SyndicationSagaWorkflow:
                 )
                 outcomes.append(f"failed:{rb_err}")
         return outcomes
+
+
+@workflow.defn
+class PreprintDepositSagaWorkflow:
+    """Scholarly preprint publication & Crossref DOI registration saga.
+
+    Executes the 4-phase scholarly publication saga:
+    1. publish_wordpress_preprint: Creates or ensures imi_registry post with
+       DOI status pending (Axiom of Search Engine Safety: no 404 leaks).
+    2. deposit_crossref: Generates Crossref Schema 5.3.1 XML and deposits
+       metadata to Crossref.
+    3. poll_crossref_status: Verifies deposit receipt and registration status.
+    4. activate_wordpress_doi: Transitions DOI status to active, recording
+       reg_crossref_deposit_id, reg_doi_minted_date, and enabling citation_doi.
+
+    On failure at steps 2-4:
+    Executes LIFO compensation: deletes or demotes the preprint post to pending,
+    guaranteeing that unminted DOIs NEVER leak to Google Scholar citation tags.
+    """
+
+    @workflow.run
+    async def run(self, request: dict) -> dict:
+        req = (
+            PreprintDepositRequest.from_dict(request)
+            if isinstance(request, dict)
+            else request
+        )
+        retry = RetryPolicy(
+            maximum_attempts=3,
+            initial_interval=timedelta(seconds=1),
+            backoff_coefficient=2.0,
+        )
+
+        compensations: list[tuple[str, Any]] = []
+        executed_compensations: list[str] = []
+
+        try:
+            # Phase 1: Publish to WordPress (pending DOI)
+            wp_result = await workflow.execute_activity(
+                "publish_wordpress_preprint",
+                request,
+                start_to_close_timeout=timedelta(seconds=60),
+                retry_policy=retry,
+            )
+            post_id = wp_result.get("post_id", 0)
+            post_url = wp_result.get("post_url", "")
+            doi_val = wp_result.get("doi", "")
+            compensations.append(("rollback_wordpress_preprint", wp_result))
+
+            # Phase 2: Deposit metadata to Crossref
+            deposit_req = {
+                **request,
+                "target_url": req.target_url or post_url,
+                "post_id": post_id,
+                "doi": doi_val,
+            }
+            cr_result = await workflow.execute_activity(
+                "deposit_crossref",
+                deposit_req,
+                start_to_close_timeout=timedelta(seconds=60),
+                retry_policy=retry,
+            )
+            deposit_id = cr_result.get("deposit_id", "")
+
+            # Phase 3: Poll / Confirm receipt status
+            poll_req = {"deposit_id": deposit_id, "doi": doi_val}
+            await workflow.execute_activity(
+                "poll_crossref_status",
+                poll_req,
+                start_to_close_timeout=timedelta(seconds=60),
+                retry_policy=retry,
+            )
+
+            # Phase 4: Activate DOI on WordPress
+            activate_req = {
+                "post_id": post_id,
+                "post_url": post_url,
+                "deposit_id": deposit_id,
+                "doi": doi_val,
+            }
+            await workflow.execute_activity(
+                "activate_wordpress_doi",
+                activate_req,
+                start_to_close_timeout=timedelta(seconds=60),
+                retry_policy=retry,
+            )
+
+            return asdict(
+                PreprintDepositResult(
+                    succeeded=True,
+                    post_id=post_id,
+                    post_url=post_url,
+                    doi=doi_val,
+                    deposit_id=deposit_id,
+                    doi_status="active",
+                )
+            )
+
+        except Exception as exc:
+            workflow.logger.error(f"PreprintDepositSagaWorkflow failed: {exc}")
+            for act_name, arg in reversed(compensations):
+                try:
+                    await workflow.execute_activity(
+                        act_name,
+                        arg,
+                        start_to_close_timeout=timedelta(seconds=30),
+                        retry_policy=retry,
+                    )
+                    executed_compensations.append("ok")
+                except Exception as rb_err:
+                    executed_compensations.append(f"failed:{rb_err}")
+
+            cause = getattr(exc, "cause", None)
+            detail = getattr(cause, "message", str(cause)) if cause else str(exc)
+            return asdict(
+                PreprintDepositResult(
+                    succeeded=False,
+                    doi_status="pending",
+                    error_message=str(detail),
+                    compensations_executed=executed_compensations,
+                )
+            )

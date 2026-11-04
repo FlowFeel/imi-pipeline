@@ -12,7 +12,10 @@ OKR: @okr_publish_pipeline
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from phosphene.imi.crossref import CrossrefReceipt
 
 
 class _FakeSendResult:
@@ -104,6 +107,21 @@ class FakeWPClient:
         self.posts[(post_type, slug)] = post
         return post
 
+    def update_post(
+        self,
+        post_type: str,
+        post_id: int,
+        data: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Update an existing post in the fake store."""
+        for key, post in self.posts.items():
+            if post.get("id") == post_id:
+                if "meta" in data and isinstance(post.get("meta"), dict):
+                    post["meta"].update(data["meta"])
+                post.update({k: v for k, v in data.items() if k != "meta"})
+                return post
+        raise ValueError(f"Post ID {post_id} not found in fake store")
+
     def post_exists(self, post_type: str, slug: str) -> bool:
         """True if create_post was called with this type and slug."""
         return (post_type, slug) in self.posts
@@ -144,7 +162,6 @@ class FakeSFClient:
         self._counter += 1
         sf_id = f"a1e{self._counter:020d}"
         record = {"Id": sf_id, "success": True, **data}
-        # Key by Headline__c (real schema) or fall back to Name/Title__c
         key = data.get(
             "Headline__c", data.get("Name", data.get("Title__c", str(self._counter)))
         )
@@ -191,18 +208,98 @@ class FakePardotClient:
         result: dict[str, str],
         recipients: list[dict] | None = None,
     ) -> list[_FakeSendResult]:
-        """Record the call and return one successful send result per recipient.
-
-        Args:
-            result: Pipeline result dict (keys like 'observatory', 'wordpress').
-            recipients: Optional recipient list override.
-
-        Returns:
-            List of _FakeSendResult, one per recipient.
-        """
+        """Record the call and return one successful send result per recipient."""
         self.calls.append({"result": result, "recipients": recipients})
         rcpts = recipients if recipients is not None else [{"email": "fake@test.com"}]
         return [
             _FakeSendResult(succeeded=True, email=r.get("email", "fake@test.com"))
             for r in rcpts
         ]
+
+
+class FakeCrossrefClient:
+    """Test double for CrossrefClientProtocol.
+
+    Records submitted deposits and returns deterministic CrossrefReceipts.
+    Can be scripted to simulate success, timeout, malformed, or rejection.
+    """
+
+    def __init__(self) -> None:
+        self.deposits: dict[str, dict[str, Any]] = {}
+        self.scripted_modes: dict[str, str] = {}
+        self._seq = 9000
+
+    def script_mode(self, doi_suffix: str, mode: str) -> None:
+        """Script response mode for a given DOI suffix."""
+        self.scripted_modes[doi_suffix] = mode
+
+    def deposit(self, xml_payload: str) -> CrossrefReceipt:
+        import re
+
+        from phosphene.imi.crossref import CrossrefReceipt, CrossrefReceiptParser
+
+        match = re.search(r"<doi>([^<]+)</doi>", xml_payload)
+        if match:
+            doi = match.group(1).strip()
+        else:
+            doi = ""
+            if "10.67767/" in xml_payload:
+                start = xml_payload.find("10.67767/")
+                doi = xml_payload[start : start + 60].split("<")[0].strip()
+
+        suffix = doi.split("imi.2026.")[-1] if "imi.2026." in doi else doi
+        mode = self.scripted_modes.get(suffix, "success")
+
+        if mode == "timeout":
+            return CrossrefReceipt(
+                is_valid=False,
+                error="Upstream timeout",
+                raw="<error>timeout</error>",
+            )
+
+        if mode == "reject":
+            return CrossrefReceipt(
+                is_valid=False,
+                error="Deposit rejected: bad metadata",
+                raw='{"error": "malformed deposit batch"}',
+            )
+
+        self._seq += 1
+        dep_id = f"cr-dep-{self._seq}"
+
+        if mode == "malformed":
+            raw = f"<deposit_receipt><cr-dep-id>{dep_id}</cr-dep-id></deposit_receipt>"
+            return CrossrefReceiptParser.parse(raw)
+
+        assigned_doi = (
+            doi if doi.startswith("10.67767/") else f"10.67767/imi.2026.{suffix}"
+        )
+        self.deposits[dep_id] = {
+            "doi": assigned_doi,
+            "status": "pending",
+        }
+        raw = (
+            "<deposit_receipt>"
+            f"<cr-dep-id>{dep_id}</cr-dep-id>"
+            f"<doi>{assigned_doi}</doi>"
+            "<status>pending</status>"
+            "</deposit_receipt>"
+        )
+        return CrossrefReceiptParser.parse(raw)
+
+    def get_deposit_status(self, deposit_id: str) -> CrossrefReceipt:
+        from phosphene.imi.crossref import CrossrefReceipt
+
+        rec = self.deposits.get(deposit_id)
+        if not rec:
+            return CrossrefReceipt(
+                deposit_id=deposit_id,
+                is_valid=False,
+                error="Unknown deposit id",
+            )
+        return CrossrefReceipt(
+            deposit_id=deposit_id,
+            doi=rec["doi"],
+            status=rec["status"],
+            is_valid=True,
+        )
