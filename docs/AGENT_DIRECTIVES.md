@@ -17,11 +17,12 @@
 The repository enforces outside-in testing across 5 formal gates:
 
 ```
-Gate 1: Lint (Ruff check & format)
-  ├── Gate 2: BDD Contracts (Behave --tags ~@integration) [0.3s, no Docker]
-  └── Gate 3: Unit Tests (Pytest -m "not integration") [3s, 233 passing]
+Gate 1: Lint & Syntax (Ruff check/format & PHP -l) [< 10s]
+  ├── Gate 2: BDD Contracts (Behave --tags ~@integration) [< 15s]
+  └── Gate 3: Pure Unit Tests (Pytest tests/unit) [T0 in-memory]
+        ├── Gate 4: Wire-Level Integration (Pytest tests/integration) [T2 wire mocks]
         └── Gate 5: DOI Harness (WP 6.4 + MariaDB + Crossref Stub) [E2E Docker]
-              └── Summary Gate: ci-pass
+              └── Summary Gate: ci-pass (Strict: all 5 gates required, 0 continue-on-error)
 ```
 
 ### Running Tests Locally
