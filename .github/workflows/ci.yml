@@ -112,10 +112,20 @@ jobs:
       - name: Start test stack
         run: docker compose -f testdata/docker-compose.test.yml up -d --wait
 
+      - name: Capture container logs on failure
+        if: failure()
+        run: |
+          echo "=== TEMPORAL LOGS ==="
+          docker logs testdata-temporal-1 2>&1 || true
+          echo "=== ES LOGS ==="
+          docker logs testdata-elasticsearch-1 2>&1 || true
+          echo "=== WEB LOGS ==="
+          docker logs testdata-web-1 2>&1 || true
+
       - name: Run MW init scripts
         run: |
-          docker exec imi-pipeline-web-1 bash /init/00-create-test-admin.sh
-          docker exec imi-pipeline-web-1 bash /init/01-seed-test-pages.sh
+          docker exec testdata-web-1 bash /init/00-create-test-admin.sh
+          docker exec testdata-web-1 bash /init/01-seed-test-pages.sh
 
       - name: Run all tests (Temporal + MW)
         run: |
