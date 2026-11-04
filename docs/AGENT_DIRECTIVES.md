@@ -86,3 +86,16 @@ When modifying or extending this pipeline, all agents and contributors must obse
    - All string formatting, HTML escaping, wikitext templating, delimiter joining, and regex parsing must reside in domain-agnostic `phosphene.utils` (Python) and `Phosphene\Utils` (PHP) submodules.
    - All regular expressions must be precompiled (`re.compile`) at module initialization.
    - See [docs/SEPARATION_DATA_MANIPULATION_TEXT_RENDERING.md](SEPARATION_DATA_MANIPULATION_TEXT_RENDERING.md) for full architectural rationale.
+
+8. **Pull Request Discipline & CI Gate Invariants:**
+   - Every change must be submitted via a Pull Request using `.github/pull_request_template.md`.
+   - Direct pushes to `main` without a passing CI run are prohibited.
+   - All commits must follow the Conventional Commits format (`feat`, `fix`, `refactor`, `docs`, `test`, `style`).
+   - Every PR must verify the 5 formal CI gates:
+     1. **Lint & Syntax:** `ruff check`, `ruff format --check`, and PHP syntax (`php -l`).
+     2. **Behavioral Proof:** `behave features/ --tags ~@integration`.
+     3. **Pure Unit:** `pytest tests/unit` and pure PHP tests with zero Docker/network.
+     4. **Docker Integration / DOI Harness:** Full stack E2E validation with clean teardown.
+     5. **Summary Gate:** `ci-pass` status check required for branch merge.
+   - In-repo dependencies (`lib/imi_wordpress`, `lib/temporal`) must remain hermetic and workspace-resolved to ensure identical local and CI execution.
+   - See [docs/PR_DISCIPLINE_AND_CI.md](PR_DISCIPLINE_AND_CI.md) for full branch protection and review guidelines.

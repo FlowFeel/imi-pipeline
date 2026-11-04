@@ -17,11 +17,11 @@ dependencies = [
 ]
 
 [tool.uv.workspace]
-members = ["lib/temporal"]
+members = ["lib/temporal", "lib/imi_wordpress"]
 
 [tool.uv.sources]
 phosphene-temporal = { workspace = true }
-imi-wordpress = { path = "../imi-wordpress", editable = true }
+imi-wordpress = { workspace = true }
 
 [project.optional-dependencies]
 dev = [

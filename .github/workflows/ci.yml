@@ -5,10 +5,17 @@ on:
     branches:
       - main
       - "feature/**"
+      - "feat/**"
+      - "fix/**"
+      - "refactor/**"
   pull_request:
     branches:
       - main
   workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   UV_CACHE_DIR: /tmp/.uv-cache
@@ -19,16 +26,17 @@ jobs:
   # Gate 1: Code Quality
   # ─────────────────────────────────
   lint:
-    name: "Lint"
+    name: "Lint & Format"
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
       - run: uv sync --all-extras
-      - run: uv run ruff check src/ tests/ features/
-      - run: uv run ruff format --check src/ tests/ features/
+      - run: uv run ruff check src/ tests/ features/ lib/imi_wordpress/src/
+      - run: uv run ruff format --check src/ tests/ features/ lib/imi_wordpress/src/
 
   # ─────────────────────────────────
   # Gate 2: Behavioral Proof (BDD)
@@ -40,6 +48,7 @@ jobs:
   bdd:
     name: "Behavioral Proof"
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: lint
     steps:
       - uses: actions/checkout@v4
@@ -69,6 +78,7 @@ jobs:
   unit:
     name: "Unit Tests"
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: lint
     steps:
       - uses: actions/checkout@v4
@@ -96,6 +106,7 @@ jobs:
   integration:
     name: "Integration (Docker)"
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [lint, unit]
     continue-on-error: true
     steps:
@@ -153,6 +164,7 @@ jobs:
   doi-harness:
     name: "DOI Harness (Docker)"
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [lint, unit]
     steps:
       - uses: actions/checkout@v4
@@ -177,6 +189,7 @@ jobs:
   ci-pass:
     name: "CI"
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     needs: [lint, bdd, unit, doi-harness]
     if: always()
     steps:

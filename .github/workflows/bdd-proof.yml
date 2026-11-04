@@ -7,7 +7,12 @@ on:
     paths:
       - 'features/**'
       - 'src/**'
+      - 'lib/**'
   workflow_dispatch:
+
+concurrency:
+  group: bdd-proof-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -16,6 +21,7 @@ jobs:
   spec:
     name: "Specification Report"
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -29,6 +35,7 @@ jobs:
       - name: Generate specification
         run: |
           uv run behave features/ \
+            --tags ~@integration \
             --no-capture \
             --format json.pretty \
             --outfile reports/spec/features.json \
