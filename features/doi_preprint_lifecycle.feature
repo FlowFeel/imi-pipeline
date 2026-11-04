@@ -1,3 +1,4 @@
+@integration
 Feature: Deliverable Base Cases for DOI Preprint Lifecycle
   As a scholarly publishing editor at Observatory and IMI
   I want preprints with DOIs to progress through an automated, idempotent lifecycle

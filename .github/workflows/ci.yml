@@ -51,6 +51,7 @@ jobs:
       - name: Run BDD features
         run: |
           uv run behave features/ \
+            --tags ~@integration \
             --no-capture \
             --format json.pretty \
             --outfile reports/bdd-report.json \
@@ -146,17 +147,13 @@ jobs:
     needs: [lint, unit]
     steps:
       - uses: actions/checkout@v4
-      - name: Checkout imi-wordpress (mu-plugin source)
-        run: |
-          git config --global url."https://${{ secrets.IMITWP_TOKEN }}@github.com/".insteadOf "https://github.com/"
-          git clone --depth 1 https://github.com/janfrel/imi-wordpress.git ../imi-wordpress
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
       - run: uv sync --all-extras
 
       - name: Boot DOI stack
-        run: make doi-up IMI_WORDPRESS_PATH=../imi-wordpress
+        run: make doi-up
 
       - name: Run DOI harness
         run: make doi-test

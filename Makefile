@@ -35,10 +35,16 @@ clean:
 COMPOSE_DOI := testdata/docker-compose.doi.yml
 IMI_WP_PATH ?= ../imi-wordpress
 
-doi-prep:         ## Stage mu-plugins from imi-wordpress into testdata/wp-mu-plugins/
-	mkdir -p testdata/wp-mu-plugins
-	cp -r $(IMI_WP_PATH)/src/php/. testdata/wp-mu-plugins/
-	cp $(IMI_WP_PATH)/wp-content/mu-plugins/*.php testdata/wp-mu-plugins/
+doi-prep:         ## Ensure testdata/wp-mu-plugins/ exists (vendored in repo or staged from IMI_WP_PATH)
+	@if [ -d "$(IMI_WP_PATH)/src/php" ]; then \
+		mkdir -p testdata/wp-mu-plugins; \
+		cp -r $(IMI_WP_PATH)/src/php/. testdata/wp-mu-plugins/; \
+		cp $(IMI_WP_PATH)/wp-content/mu-plugins/*.php testdata/wp-mu-plugins/; \
+	elif [ -d "testdata/wp-mu-plugins" ]; then \
+		echo "Using vendored testdata/wp-mu-plugins"; \
+	else \
+		echo "Error: testdata/wp-mu-plugins not found and $(IMI_WP_PATH) unavailable" >&2; exit 1; \
+	fi
 
 doi-up: doi-prep  ## Boot the DOI harness stack and configure WP
 	docker compose -f $(COMPOSE_DOI) up -d --wait
@@ -50,4 +56,3 @@ doi-test:         ## Run DOI lifecycle BDD scenarios against the stack
 
 doi-down:         ## Tear down the DOI harness stack
 	docker compose -f $(COMPOSE_DOI) down -v
-	rm -rf testdata/wp-mu-plugins/
