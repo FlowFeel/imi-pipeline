@@ -82,7 +82,7 @@ flowchart TD
 | **Gate 1** | **Lint & Syntax** | `ruff check`, `ruff format --check`, and PHP syntax (`php -l`). Catches syntax and lint errors instantly. | < 15 seconds |
 | **Gate 2** | **BDD Behavioral Proof** | Runs `behave features/ --tags ~@integration`. Verifies customer-visible contracts without live services. Generates living specification artifact. | < 30 seconds |
 | **Gate 3** | **Pure Unit Tests (T0)** | Pytest and PHP unit suites (`php tests/php/run-pure-tests.php`). Zero network, zero database, zero disk IO. | < 10 seconds |
-| **Gate 4** | **Docker Integration** | Full container stack (Temporal + MediaWiki + Elasticsearch + MySQL). Verifies sagas and distributed transactions. | ~ 2 minutes |
+| **Gate 4** | **Wire-Level Integration** | Real HTTP tests against wire-level mocks for Observatory, WordPress, and Salesforce outlets (`pytest tests/integration`). | < 5 seconds |
 | **Gate 5** | **DOI Test Harness** | Boots WordPress 6.4 + MariaDB 10.11 + Crossref HTTP Stub. Verifies scholarly metadata deposit, citation tags, and retraction flows. | ~ 1 minute |
 | **Summary** | **ci-pass Gate** | Aggregates results of all required gates. Used as the mandatory GitHub Branch Protection status check. | Instant |
 

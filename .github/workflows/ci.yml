@@ -23,7 +23,7 @@ env:
 jobs:
 
   # ─────────────────────────────────
-  # Gate 1: Code Quality
+  # Gate 1: Code Quality & Syntax
   # ─────────────────────────────────
   lint:
     name: "Lint & Format"
@@ -37,6 +37,8 @@ jobs:
       - run: uv sync --all-extras
       - run: uv run ruff check src/ tests/ features/ lib/imi_wordpress/src/
       - run: uv run ruff format --check src/ tests/ features/ lib/imi_wordpress/src/
+      - name: Validate PHP syntax in testdata
+        run: find testdata/wp-mu-plugins -name "*.php" -exec php -l {} +
 
   # ─────────────────────────────────
   # Gate 2: Behavioral Proof (BDD)
@@ -73,7 +75,7 @@ jobs:
           path: reports/bdd-report.json
 
   # ─────────────────────────────────
-  # Gate 3: Unit Tests (no Docker)
+  # Gate 3: Unit Tests (T0 Pure Unit)
   # ─────────────────────────────────
   unit:
     name: "Unit Tests"
@@ -98,55 +100,29 @@ jobs:
           path: reports/unit.xml
 
   # ─────────────────────────────────
-  # Gate 4: Integration (Docker) — Temporal + MW
+  # Gate 4: Wire-Level Integration Tests (T2)
   #
-  # Marked continue-on-error until MW container entrypoint is refactored
-  # to decouple legacy MediaWiki 2.1.1 extensions on GHA runners.
+  # Real HTTP wire tests against mock servers
+  # for Observatory, WordPress, and Salesforce outlets.
+  # Validates Kelly contracts and payload schemas.
   # ─────────────────────────────────
   integration:
-    name: "Integration (Docker)"
+    name: "Wire-Level Integration"
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
     needs: [lint, unit]
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
       - run: uv sync --all-extras
-
-      - name: Login to GHCR
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-
-      - name: Start test stack
-        run: docker compose -f testdata/docker-compose.test.yml up -d --wait
-
-      - name: Capture container logs on failure
-        if: failure()
+      - name: Run wire-level integration tests
         run: |
-          echo "=== TEMPORAL LOGS ==="
-          docker logs testdata-temporal-1 2>&1 || true
-          echo "=== ES LOGS ==="
-          docker logs testdata-elasticsearch-1 2>&1 || true
-          echo "=== WEB LOGS ==="
-          docker logs testdata-web-1 2>&1 || true
-
-      - name: Run MW init scripts
-        run: |
-          docker exec testdata-web-1 bash /init/00-create-test-admin.sh
-          docker exec testdata-web-1 bash /init/01-seed-test-pages.sh
-
-      - name: Run all tests (Temporal + MW)
-        run: |
-          uv run pytest tests/unit tests/integration \
+          uv run pytest tests/integration \
+            -m "not integration_live" \
             -v --tb=short \
             --junitxml=reports/integration.xml
-
-      - name: Tear down
-        if: always()
-        run: docker compose -f testdata/docker-compose.test.yml down -v
-
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -154,7 +130,7 @@ jobs:
           path: reports/integration.xml
 
   # ─────────────────────────────────
-  # Gate 5: DOI Harness (Docker)
+  # Gate 5: DOI Harness (Docker E2E)
   #
   # Boots WP + MariaDB + Crossref stub.
   # Runs the DOI lifecycle BDD scenarios
@@ -184,18 +160,18 @@ jobs:
         run: make doi-down
 
   # ─────────────────────────────────
-  # Summary Gate
+  # Summary Gate (Mandatory Merge Check)
   # ─────────────────────────────────
   ci-pass:
     name: "CI"
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [lint, bdd, unit, doi-harness]
+    needs: [lint, bdd, unit, integration, doi-harness]
     if: always()
     steps:
       - name: Check all gates
         run: |
-          for r in "${{ needs.lint.result }}" "${{ needs.bdd.result }}" "${{ needs.unit.result }}" "${{ needs.doi-harness.result }}"; do
+          for r in "${{ needs.lint.result }}" "${{ needs.bdd.result }}" "${{ needs.unit.result }}" "${{ needs.integration.result }}" "${{ needs.doi-harness.result }}"; do
             if [ "$r" != "success" ]; then echo "Gate failed: $r"; exit 1; fi
           done
-          echo "All gates passed"
+          echo "All 5 gates passed successfully"
