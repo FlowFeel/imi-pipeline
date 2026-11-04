@@ -100,7 +100,7 @@ class _Stub(BaseHTTPRequestHandler):
                     break
         suffix = ""
         if "imi.2026." in doi:
-            suffix = doi.split("imi.2026.", 1)[1].strip("<>&\"' ").strip()
+            suffix = doi.split("imi.2026.", 1)[1].split("<")[0].strip()
 
         mode = _SCRIPTED.get(suffix, "success")
 
