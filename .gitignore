@@ -16,5 +16,4 @@ coverage_html/
 *.coverage
 .coverage.*
 uv.lock
-testdata/wp-mu-plugins/
 testdata/.wp_app_password

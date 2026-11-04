@@ -278,6 +278,15 @@ class TestE2ESimulation:
         assert len(comps) == 1
         assert comps[0].startswith("failed:")
 
+    @pytest.mark.skip(
+        reason=(
+            "Cross-repo import: imi_article_watcher lives in woodchipper "
+            "(scripts/feelingflowingbot/heartbeat/). The watcher's ArticleDraft "
+            "extraction, the mock_parse_response.json fixture, and the fixture "
+            "path (tests/unit/fixtures/) all belong to the woodchipper repo. "
+            "Test the watcher's Draft extraction in woodchipper."
+        )
+    )
     @pytest.mark.asyncio
     async def test_article_watcher_draft_extraction(self) -> None:
         """ArticleDraft is correctly built from a MediaWiki parse response.
