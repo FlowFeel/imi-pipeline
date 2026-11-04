@@ -248,7 +248,7 @@ class TestWordPressPayload:
         assert meta["reg_doi_status"] == "active"
         assert meta["reg_crossref_deposit_id"] == "cr-dep-9912"
         assert meta["reg_pipeline_status"] == "preprint"
-        assert meta["reg_keywords"] == "Agriculture, Degrowth" 
+        assert meta["reg_keywords"] == "Agriculture, Degrowth"
 
 
 class TestWordPressFormatterContract:
