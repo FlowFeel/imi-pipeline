@@ -8,7 +8,7 @@ services:
       POSTGRES_DB: temporal
     volumes:
       - temporal-db-test:/var/lib/postgresql/data
-      - ./testdata/init-temporal:/docker-entrypoint-initdb.d:ro
+      - ./init-temporal:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "temporal"]
       interval: 5s
@@ -94,10 +94,10 @@ services:
     ports:
       - "8085:80"
     volumes:
-      - ./testdata/init:/init:ro
-      - ./testdata/main-stubs/update-docker-gateway.sh:/update-docker-gateway.sh:ro
-      - ./testdata/main-stubs/update-images-permissions.sh:/update-images-permissions.sh:ro
-      - ./testdata/main-stubs/run-maintenance-scripts.sh:/run-maintenance-scripts.sh:ro
+      - ./init:/init:ro
+      - ./main-stubs/update-docker-gateway.sh:/update-docker-gateway.sh:ro
+      - ./main-stubs/update-images-permissions.sh:/update-images-permissions.sh:ro
+      - ./main-stubs/run-maintenance-scripts.sh:/run-maintenance-scripts.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost/w/api.php || exit 1"]
       interval: 10s
