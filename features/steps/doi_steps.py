@@ -131,6 +131,7 @@ class HttpWPClient:
     def __init__(self, base_url: str) -> None:
         self._base_url = base_url
         self.last_created_post: dict[str, Any] | None = None
+        self.last_created_post_id: int | None = None
 
     def create_post(
         self,
@@ -144,7 +145,23 @@ class HttpWPClient:
             raise AssertionError(f"WP create failed [{code}]: {text}")
         post = json.loads(text)
         self.last_created_post = post
+        self.last_created_post_id = post.get("id")
+        if "id" in post:
+            post["url"] = _url(self._base_url, f"?p={post['id']}")
         return post
+
+    def update_post(
+        self,
+        post_type: str,
+        post_id: int,
+        data: dict[str, Any],
+    ) -> dict[str, Any]:
+        code, text = _http(
+            "POST", _url(self._base_url, f"wp-json/wp/v2/{post_type}/{post_id}"), data
+        )
+        if code not in (200, 201):
+            raise AssertionError(f"WP update failed [{code}]: {text}")
+        return json.loads(text)
 
     def post_exists(self, post_type: str, slug: str) -> bool:
         return False
@@ -152,8 +169,28 @@ class HttpWPClient:
     def post_url(self, post_type: str, slug: str) -> str:
         return _url(self._base_url, f"?p={slug}")
 
-    def delete_post(self, post_url: str) -> None:
-        pass
+    def delete_post(
+        self, post_url_or_id: str | int, post_type: str = "imi_registry"
+    ) -> None:
+        post_id: int | None = None
+        if isinstance(post_url_or_id, int):
+            post_id = post_url_or_id
+        elif isinstance(post_url_or_id, str):
+            clean = post_url_or_id.strip()
+            if clean.isdigit():
+                post_id = int(clean)
+            elif "?p=" in clean:
+                match = re.search(r"[?&]p=(\d+)", clean)
+                if match:
+                    post_id = int(match.group(1))
+        if not post_id:
+            return
+        code, text = _http(
+            "DELETE",
+            _url(self._base_url, f"wp-json/wp/v2/{post_type}/{post_id}?force=true"),
+        )
+        if code not in (200, 201):
+            raise AssertionError(f"WP delete failed [{code}]: {text}")
 
 
 def _build_preprint_work(context: Any) -> PreprintWork:
@@ -522,3 +559,104 @@ def step_doi_status_remains(context: Any, status: str) -> None:
     assert meta.get("reg_doi_status") == status, (
         f"Expected DOI status {status}, got {meta.get('reg_doi_status')}"
     )
+
+
+# ── Live Wire Saga Steps ─────────────────────────────────────────────────────
+
+
+@given('a valid preprint deposit request for "{title}" with DOI suffix "{suffix}"')
+def step_valid_preprint_deposit_request(context: Any, title: str, suffix: str) -> None:
+    context.saga_title = title
+    context.saga_doi_suffix = suffix
+    clean_suffix = suffix.replace("imi.2026.", "")
+    context.saga_doi = f"10.67767/imi.2026.{clean_suffix}"
+    context.saga_request = {
+        "title": title,
+        "primary_author_name": "Deborah Barsky",
+        "primary_author_orcid": "https://orcid.org/0000-0002-1825-0097",
+        "doi_suffix": clean_suffix,
+        "abstract": f"Scholarly abstract for {title}",
+        "idempotency_key": f"test-live-saga-{abs(hash(title))}",
+    }
+
+
+@when("the preprint publication saga executes against the live stack")
+def step_saga_executes_live_stack(context: Any) -> None:
+    import asyncio
+
+    from temporalio.testing import WorkflowEnvironment
+    from temporalio.worker import Worker
+
+    from phosphene.imi.activities import SyndicationActivities
+    from phosphene.imi.crossref import HttpCrossrefClient
+    from phosphene.imi.workflow import PreprintDepositSagaWorkflow
+
+    wp_client = HttpWPClient(WP_BASE_URL)
+    crossref_client = HttpCrossrefClient(STUB_BASE_URL)
+    activities = SyndicationActivities(
+        wp_client=wp_client,
+        mw_client=None,  # type: ignore[arg-type]
+        sf_client=None,  # type: ignore[arg-type]
+        pardot_client=None,  # type: ignore[arg-type]
+        crossref_client=crossref_client,
+    )
+
+    async def _run() -> dict[str, Any]:
+        async with await WorkflowEnvironment.start_time_skipping() as env:
+            async with Worker(
+                env.client,
+                task_queue=f"queue-live-{abs(hash(context.saga_title))}",
+                workflows=[PreprintDepositSagaWorkflow],
+                activities=[
+                    activities.publish_wordpress_preprint,
+                    activities.deposit_crossref,
+                    activities.poll_crossref_status,
+                    activities.activate_wordpress_doi,
+                    activities.rollback_wordpress_preprint,
+                ],
+            ):
+                return await env.client.execute_workflow(
+                    PreprintDepositSagaWorkflow.run,
+                    context.saga_request,
+                    id=f"wf-live-{abs(hash(context.saga_title))}",
+                    task_queue=f"queue-live-{abs(hash(context.saga_title))}",
+                )
+
+    context.saga_result = asyncio.run(_run())
+    context.saga_wp_client = wp_client
+    if context.saga_result.get("post_id"):
+        context.preprint_id = context.saga_result["post_id"]
+    elif wp_client.last_created_post_id:
+        context.preprint_id = wp_client.last_created_post_id
+        context.failed_post_id = wp_client.last_created_post_id
+
+
+@then("the saga execution fails with a Crossref rejection error")
+def step_saga_fails_crossref_rejection(context: Any) -> None:
+    res = context.saga_result
+    assert not res.get("succeeded"), f"Expected saga failure, got {res}"
+    assert "pending" in res.get("doi_status", "")
+    assert len(res.get("compensations_executed", [])) > 0, (
+        f"No compensations executed: {res}"
+    )
+
+
+@then("the preprint post is permanently purged from WordPress")
+def step_preprint_post_purged(context: Any) -> None:
+    post_id = getattr(context, "failed_post_id", None) or getattr(
+        context, "preprint_id", None
+    )
+    assert post_id is not None, "No post ID captured during failed saga"
+    code, text = _http(
+        "GET", _url(WP_BASE_URL, f"wp-json/wp/v2/imi_registry/{post_id}")
+    )
+    assert code == 404, (
+        f"Expected post {post_id} to be purged (404), got [{code}]: {text}"
+    )
+
+
+@then('the post meta "{key}" has prefix "{prefix}"')
+def step_post_meta_prefix(context: Any, key: str, prefix: str) -> None:
+    meta = _wp_meta(context.preprint_id)
+    val = str(meta.get(key) or "")
+    assert val.startswith(prefix), f"meta[{key}]={val!r}, expected prefix {prefix!r}"

@@ -130,10 +130,14 @@ class FakeWPClient:
         """Return the URL that would have been assigned."""
         return f"{self.base_url}/{post_type}/{slug}/"
 
-    def delete_post(self, post_url: str) -> None:
-        """Remove a post from the fake store by URL."""
+    def delete_post(self, post_url: str | int) -> None:
+        """Remove a post from the fake store by URL or post ID."""
         for key, post in list(self.posts.items()):
-            if post.get("url") == post_url:
+            if (
+                post.get("url") == post_url
+                or post.get("id") == post_url
+                or str(post.get("id")) == str(post_url)
+            ):
                 del self.posts[key]
                 return
 

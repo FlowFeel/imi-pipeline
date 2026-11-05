@@ -410,9 +410,13 @@ class SyndicationActivities:
     async def rollback_wordpress_preprint(self, post_info: Any) -> None:
         """Rollback compensation: delete post if DOI registration aborted."""
         if isinstance(post_info, dict):
+            post_id = post_info.get("post_id", 0)
             post_url = post_info.get("post_url", "")
-            if post_url:
-                self._wp.delete_post(post_url)
+            if hasattr(self._wp, "delete_post"):
+                if post_id:
+                    self._wp.delete_post(post_id)
+                elif post_url:
+                    self._wp.delete_post(post_url)
 
     # ------------------------------------------------------------------
     # Internal helpers

@@ -96,6 +96,116 @@ class UrllibWPClient:
         except Exception as exc:  # noqa: BLE001
             return {"error": True, "message": str(exc)}
 
+    def update_post(self, post_type: str, post_id: int, data: dict[str, Any]) -> dict[str, Any]:
+        """Update a WordPress post via the REST API.
+
+        Sends a POST request to /wp-json/wp/v2/{post_type}/{post_id}.
+        Never raises — catches all exceptions and returns an error dict on failure.
+
+        Args:
+            post_type: WordPress post type slug (e.g. "posts", "imi_registry").
+            post_id: WordPress post ID.
+            data: Post data dict to update (meta, status, title, etc.).
+
+        Returns:
+            Updated post response dict, or {"error": True, "message": ...} on failure.
+        """
+        url = f"{self.config.url}/wp-json/wp/v2/{post_type}/{post_id}"
+        body = json.dumps(data).encode("utf-8")
+
+        req = urllib.request.Request(
+            url,
+            data=body,
+            headers={
+                "Authorization": self._auth_header,
+                "Content-Type": "application/json",
+                "User-Agent": USER_AGENT,
+            },
+            method="POST",
+        )
+
+        try:
+            with urllib.request.urlopen(req) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except (urllib.error.URLError, urllib.error.HTTPError, json.JSONDecodeError) as exc:
+            return {"error": True, "message": str(exc)}
+        except Exception as exc:  # noqa: BLE001
+            return {"error": True, "message": str(exc)}
+
+    def delete_post(
+        self, post_url_or_id: str | int, post_type: str = "imi_registry"
+    ) -> dict[str, Any]:
+        """Permanently delete a WordPress post via the REST API (force=true).
+
+        Used by saga compensation to clean up posts when downstream Crossref
+        deposit fails (Axiom of Search Engine Safety: no leaked dead links).
+        Accepts either a post ID (int or numeric str) or a URL.
+        Never raises — catches all exceptions and returns an error dict on failure.
+
+        Args:
+            post_url_or_id: Post ID or URL of the post to delete.
+            post_type: WordPress post type slug (default: "imi_registry").
+
+        Returns:
+            WordPress deletion response dict (e.g. {"deleted": True, ...})
+            or {"error": True, "message": ...} on failure.
+        """
+        import re
+
+        post_id: int | None = None
+        if isinstance(post_url_or_id, int):
+            post_id = post_url_or_id
+        elif isinstance(post_url_or_id, str):
+            clean = post_url_or_id.strip()
+            if clean.isdigit():
+                post_id = int(clean)
+            elif "?p=" in clean:
+                match = re.search(r"[?&]p=(\d+)", clean)
+                if match:
+                    post_id = int(match.group(1))
+            else:
+                slug = clean.rstrip("/").split("/")[-1]
+                url = self.post_url(post_type, slug)
+                req = urllib.request.Request(
+                    url,
+                    headers={
+                        "Authorization": self._auth_header,
+                        "User-Agent": USER_AGENT,
+                    },
+                    method="GET",
+                )
+                try:
+                    with urllib.request.urlopen(req) as resp:
+                        results = json.loads(resp.read().decode("utf-8"))
+                        if isinstance(results, list) and results:
+                            post_id = results[0].get("id")
+                except Exception:  # noqa: BLE001, S110
+                    pass
+
+        if not post_id:
+            return {
+                "error": True,
+                "message": f"Could not resolve post ID from '{post_url_or_id}'",
+            }
+
+        del_url = f"{self.config.url}/wp-json/wp/v2/{post_type}/{post_id}?force=true"
+        del_req = urllib.request.Request(
+            del_url,
+            headers={
+                "Authorization": self._auth_header,
+                "User-Agent": USER_AGENT,
+            },
+            method="DELETE",
+        )
+
+        try:
+            with urllib.request.urlopen(del_req) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except (urllib.error.URLError, urllib.error.HTTPError, json.JSONDecodeError) as exc:
+            return {"error": True, "message": str(exc)}
+        except Exception as exc:  # noqa: BLE001
+            return {"error": True, "message": str(exc)}
+
     def post_exists(self, post_type: str, slug: str) -> bool:
         """Check if a post with the given slug exists.
 

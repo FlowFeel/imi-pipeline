@@ -83,7 +83,7 @@ class WPClientProtocol(Protocol):
         """Canonical URL for a post type and slug."""
         ...
 
-    def delete_post(self, post_url: str) -> None:
+    def delete_post(self, post_url: str | int) -> None:
         """Delete a WordPress post. Used by saga compensation."""
         ...
 
