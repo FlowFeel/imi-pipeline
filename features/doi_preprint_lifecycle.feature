@@ -80,3 +80,15 @@ Feature: Deliverable Base Cases for DOI Preprint Lifecycle
     And the Crossref stub is scripted to return "malformed" for suffix "901"
     When the harness deposits the preprint metadata to the Crossref stub
     Then the harness records a malformed-receipt error and does not activate the DOI
+
+  Scenario: Crossref simulator validates Schema 5.3.1 and rejects missing depositor
+    Given a published preprint titled "Harness Schema Rejection" with DOI suffix "imi.2026.902"
+    When the harness deposits malformed Schema XML missing depositor
+    Then the Crossref simulator returns a Schema 5.3.1 diagnostic error
+    And the DOI status remains "pending"
+
+  Scenario: Registered DOI resolves via HTTP 302 to the preprint landing page
+    Given a published preprint titled "Harness Resolution Test" with DOI suffix "imi.2026.903"
+    When the harness deposits the preprint metadata to the Crossref stub
+    Then resolving the DOI "10.67767/imi.2026.903" redirects to the preprint landing page
+    And resolving the unregistered DOI "10.67767/imi.2026.999" returns 404

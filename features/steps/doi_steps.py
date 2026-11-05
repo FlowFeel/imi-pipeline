@@ -452,3 +452,73 @@ def step_malformed_rejected(context: Any) -> None:
     meta = _wp_meta(context.preprint_id)
     assert meta.get("reg_doi_status") != "active", "malformed receipt activated DOI"
     assert meta.get("reg_doi_status") == "pending", f"meta={meta!r}"
+
+
+@when("the harness deposits malformed Schema XML missing depositor")
+def step_deposit_missing_depositor(context: Any) -> None:
+    from phosphene.imi.crossref import HttpCrossrefClient
+
+    client = HttpCrossrefClient(STUB_BASE_URL)
+    bad_xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<doi_batch xmlns="http://www.crossref.org/schema/5.3.1" version="5.3.1">\n'
+        "  <head><doi_batch_id>b1</doi_batch_id><timestamp>1700000000</timestamp><registrant>IMI</registrant></head>\n"
+        '  <body><posted_content type="preprint"><titles><title>T</title></titles></posted_content></body>\n'
+        "</doi_batch>"
+    )
+    receipt = client.deposit(bad_xml)
+    context.crossref_receipt = receipt
+    context.deposit_code = 201 if receipt.is_valid else 400
+    context.deposit_response = receipt.raw
+
+
+@then("the Crossref simulator returns a Schema 5.3.1 diagnostic error")
+def step_diagnostic_error(context: Any) -> None:
+    receipt = getattr(context, "crossref_receipt", None)
+    assert receipt is not None
+    assert receipt.is_valid is False
+    assert (
+        "depositor" in (receipt.error or "").lower()
+        or "failure" in (receipt.raw or "").lower()
+    )
+
+
+@then('resolving the DOI "{doi}" redirects to the preprint landing page')
+def step_resolve_doi(context: Any, doi: str) -> None:
+    url = f"{STUB_BASE_URL}/resolve/{doi}"
+
+    class NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, req, fp, code, msg, headers, newurl):
+            return None
+
+    opener = urllib.request.build_opener(NoRedirect)
+    try:
+        resp = opener.open(url)
+        code = resp.getcode()
+        loc = resp.headers.get("Location")
+    except urllib.error.HTTPError as exc:
+        code = exc.code
+        loc = exc.headers.get("Location")
+
+    assert code == 302, f"Expected 302 redirect for active DOI, got {code}"
+    expected_url = _url(WP_BASE_URL, f"?p={getattr(context, 'preprint_id', 0)}")
+    assert loc == expected_url, f"Expected redirect to {expected_url}, got {loc}"
+
+
+@then('resolving the unregistered DOI "{doi}" returns 404')
+def step_resolve_unregistered_doi(context: Any, doi: str) -> None:
+    url = f"{STUB_BASE_URL}/resolve/{doi}"
+    try:
+        with urllib.request.urlopen(url) as resp:
+            code = resp.getcode()
+    except urllib.error.HTTPError as exc:
+        code = exc.code
+    assert code == 404, f"Expected 404 for unregistered DOI, got {code}"
+
+
+@then('the DOI status remains "{status}"')
+def step_doi_status_remains(context: Any, status: str) -> None:
+    meta = _wp_meta(context.preprint_id)
+    assert meta.get("reg_doi_status") == status, (
+        f"Expected DOI status {status}, got {meta.get('reg_doi_status')}"
+    )
