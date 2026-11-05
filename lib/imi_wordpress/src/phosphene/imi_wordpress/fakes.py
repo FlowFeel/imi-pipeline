@@ -81,6 +81,44 @@ class FakeWPClient:
         self.created_posts.append(post)
         return post
 
+    def update_post(self, post_type: str, post_id: int, data: dict[str, Any]) -> dict[str, Any]:
+        self.calls.append(
+            {"method": "update_post", "post_type": post_type, "post_id": post_id, "data": data}
+        )
+        for post in self.created_posts:
+            if post.get("id") == post_id:
+                if (
+                    "meta" in data
+                    and isinstance(post.get("meta"), dict)
+                    and isinstance(data["meta"], dict)
+                ):
+                    post["meta"].update(data["meta"])
+                post.update({k: v for k, v in data.items() if k != "meta"})
+                return post
+        return {"error": True, "message": f"Post {post_id} not found"}
+
+    def delete_post(
+        self, post_url_or_id: str | int, post_type: str = "imi_registry"
+    ) -> dict[str, Any]:
+        self.calls.append(
+            {"method": "delete_post", "post_url_or_id": post_url_or_id, "post_type": post_type}
+        )
+        target_id: int | None = None
+        if isinstance(post_url_or_id, int):
+            target_id = post_url_or_id
+        elif isinstance(post_url_or_id, str) and post_url_or_id.isdigit():
+            target_id = int(post_url_or_id)
+
+        for i, post in enumerate(self.created_posts):
+            match_id = target_id is not None and post.get("id") == target_id
+            match_url = isinstance(post_url_or_id, str) and (
+                post.get("slug") in post_url_or_id or str(post.get("id")) in post_url_or_id
+            )
+            if match_id or match_url:
+                deleted = self.created_posts.pop(i)
+                return {"deleted": True, "previous": deleted}
+        return {"error": True, "message": f"Post {post_url_or_id} not found"}
+
     def post_exists(self, post_type: str, slug: str) -> bool:
         self.calls.append({"method": "post_exists", "post_type": post_type, "slug": slug})
         for post in self.created_posts:

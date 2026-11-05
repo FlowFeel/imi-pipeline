@@ -52,6 +52,16 @@ class WPClientProtocol(Protocol):
         """Create a WordPress post."""
         ...
 
+    def update_post(self, post_type: str, post_id: int, data: dict[str, Any]) -> dict[str, Any]:
+        """Update a WordPress post via the REST API."""
+        ...
+
+    def delete_post(
+        self, post_url_or_id: str | int, post_type: str = "imi_registry"
+    ) -> dict[str, Any]:
+        """Delete a WordPress post permanently (used by saga compensation)."""
+        ...
+
     def post_exists(self, post_type: str, slug: str) -> bool:
         """Check if a post with the given slug exists."""
         ...

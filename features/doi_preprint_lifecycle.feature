@@ -92,3 +92,21 @@ Feature: Deliverable Base Cases for DOI Preprint Lifecycle
     When the harness deposits the preprint metadata to the Crossref stub
     Then resolving the DOI "10.67767/imi.2026.903" redirects to the preprint landing page
     And resolving the unregistered DOI "10.67767/imi.2026.999" returns 404
+
+
+  Scenario: Live wire saga compensation purges WordPress post when Crossref deposit fails
+    Given a valid preprint deposit request for "Faulty Stratigraphy Survey" with DOI suffix "imi.2026.904"
+    And the Crossref stub is scripted to return "reject" for suffix "904"
+    When the preprint publication saga executes against the live stack
+    Then the saga execution fails with a Crossref rejection error
+    And the preprint post is permanently purged from WordPress
+    And resolving the unregistered DOI "10.67767/imi.2026.904" returns 404
+
+  Scenario: Live wire saga completes 4-phase publication against live WordPress and Crossref
+    Given a valid preprint deposit request for "Live Saga Stratigraphy" with DOI suffix "imi.2026.905"
+    When the preprint publication saga executes against the live stack
+    Then the saga completes successfully
+    And the post meta "reg_doi_status" is "active"
+    And the post meta "reg_doi" is "10.67767/imi.2026.905"
+    And the post meta "reg_crossref_deposit_id" has prefix "cr-dep-"
+    And resolving the DOI "10.67767/imi.2026.905" redirects to the preprint landing page
