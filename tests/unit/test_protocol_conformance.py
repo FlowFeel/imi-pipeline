@@ -47,3 +47,11 @@ class TestProtocolConformance:
     def test_sf_protocol_has_delete_record(self) -> None:
         """SFClientProtocol defines delete_record for saga compensation."""
         assert hasattr(SFClientProtocol, "delete_record")
+
+    def test_urllib_mw_client_satisfies_protocol(self) -> None:
+        """UrllibMWClient satisfies MWClientProtocol."""
+        from phosphene.imi.clients.mediawiki import MWConfig, UrllibMWClient
+
+        cfg = MWConfig(base_url="https://test.wiki", username="u", password="p")
+        client = UrllibMWClient(cfg)
+        assert isinstance(client, MWClientProtocol)

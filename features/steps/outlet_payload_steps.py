@@ -353,6 +353,18 @@ class _MockMWClient:
         base = self._base_url.replace("/w", "").rstrip("/")
         return f"{base}/wiki/{safe.replace(' ', '_')}"
 
+    def delete_page(self, title: str, reason: str = "") -> dict[str, Any]:
+        """Delete a page from the mock server."""
+        r = self._get(action="query", meta="tokens")
+        token = r["query"]["tokens"]["csrftoken"]
+        safe = self._safe_title(title)
+        return self._post(
+            action="delete",
+            title=safe,
+            reason=reason or f"BDD rollback — {safe}",
+            token=token,
+        )
+
 
 # ---------------------------------------------------------------------------
 # Lazy mock server cache — one per feature, started on first use

@@ -226,7 +226,7 @@ class PreprintDepositSagaWorkflow:
         executed_compensations: list[str] = []
 
         try:
-            # Phase 1: Publish to WordPress (pending DOI)
+            # Phase 1a: Publish to WordPress (pending DOI)
             wp_result = await workflow.execute_activity(
                 "publish_wordpress_preprint",
                 request,
@@ -238,12 +238,27 @@ class PreprintDepositSagaWorkflow:
             doi_val = wp_result.get("doi", "")
             compensations.append(("rollback_wordpress_preprint", wp_result))
 
+            # Phase 1b: Publish to Observatory MediaWiki (if enabled)
+            wiki_url = ""
+            wiki_title = ""
+            if req.syndicate_to_observatory:
+                mw_result = await workflow.execute_activity(
+                    "publish_observatory_preprint",
+                    request,
+                    start_to_close_timeout=timedelta(seconds=60),
+                    retry_policy=retry,
+                )
+                wiki_url = mw_result.get("wiki_url", "")
+                wiki_title = mw_result.get("wiki_title", req.title)
+                compensations.append(("rollback_observatory_preprint", mw_result))
+
             # Phase 2: Deposit metadata to Crossref
             deposit_req = {
                 **request,
                 "target_url": req.target_url or post_url,
                 "post_id": post_id,
                 "doi": doi_val,
+                "wiki_url": wiki_url,
             }
             cr_result = await workflow.execute_activity(
                 "deposit_crossref",
@@ -262,7 +277,7 @@ class PreprintDepositSagaWorkflow:
                 retry_policy=retry,
             )
 
-            # Phase 4: Activate DOI on WordPress
+            # Phase 4a: Activate DOI on WordPress
             activate_req = {
                 "post_id": post_id,
                 "post_url": post_url,
@@ -276,6 +291,21 @@ class PreprintDepositSagaWorkflow:
                 retry_policy=retry,
             )
 
+            # Phase 4b: Activate DOI on Observatory MediaWiki (if enabled)
+            if req.syndicate_to_observatory and wiki_url:
+                activate_mw_req = {
+                    "title": wiki_title or req.title,
+                    "doi": doi_val,
+                    "post_url": post_url,
+                    "deposit_id": deposit_id,
+                }
+                await workflow.execute_activity(
+                    "activate_observatory_preprint",
+                    activate_mw_req,
+                    start_to_close_timeout=timedelta(seconds=60),
+                    retry_policy=retry,
+                )
+
             return asdict(
                 PreprintDepositResult(
                     succeeded=True,
@@ -284,6 +314,8 @@ class PreprintDepositSagaWorkflow:
                     doi=doi_val,
                     deposit_id=deposit_id,
                     doi_status="active",
+                    wiki_url=wiki_url,
+                    wiki_title=wiki_title,
                 )
             )
 

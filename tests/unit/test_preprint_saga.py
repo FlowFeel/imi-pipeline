@@ -206,6 +206,188 @@ class TestPreprintDepositSagaWorkflow:
         assert "activate_wordpress_doi" not in execution_order
         assert comp_log == ["ROLLBACK_WP:102"]
 
+    @pytest.mark.asyncio
+    async def test_tri_service_happy_path_all_phases_succeed(self) -> None:
+        execution_order: list[str] = []
+        comp_log: list[str] = []
+
+        @activity.defn(name="publish_wordpress_preprint")
+        async def mock_publish_wp(req: dict) -> dict:
+            execution_order.append("publish_wordpress_preprint")
+            return {
+                "post_id": 105,
+                "post_url": "https://ind.media/registry/lithic-tools",
+                "doi": "10.67767/imi.2026.042",
+                "title": req.get("title", ""),
+            }
+
+        @activity.defn(name="publish_observatory_preprint")
+        async def mock_publish_mw(req: dict) -> dict:
+            execution_order.append("publish_observatory_preprint")
+            return {
+                "wiki_url": "https://observatory.wiki/wiki/Lithic_Tools",
+                "wiki_title": req.get("title", ""),
+            }
+
+        @activity.defn(name="deposit_crossref")
+        async def mock_deposit(req: dict) -> dict:
+            execution_order.append("deposit_crossref")
+            return {
+                "deposit_id": "cr-dep-9912",
+                "doi": "10.67767/imi.2026.042",
+                "status": "pending",
+            }
+
+        @activity.defn(name="poll_crossref_status")
+        async def mock_poll(req: dict) -> dict:
+            execution_order.append("poll_crossref_status")
+            return {
+                "deposit_id": "cr-dep-9912",
+                "doi": "10.67767/imi.2026.042",
+                "status": "active",
+            }
+
+        @activity.defn(name="activate_wordpress_doi")
+        async def mock_activate_wp(req: dict) -> dict:
+            execution_order.append("activate_wordpress_doi")
+            return {"activated": True, "doi": req.get("doi", ""), "post_id": 105}
+
+        @activity.defn(name="activate_observatory_preprint")
+        async def mock_activate_mw(req: dict) -> dict:
+            execution_order.append("activate_observatory_preprint")
+            return {
+                "activated": True,
+                "title": req.get("title", ""),
+                "status": "active",
+            }
+
+        @activity.defn(name="rollback_wordpress_preprint")
+        async def mock_rollback_wp(arg: dict) -> None:
+            comp_log.append("ROLLBACK_WP")
+
+        @activity.defn(name="rollback_observatory_preprint")
+        async def mock_rollback_mw(arg: dict) -> None:
+            comp_log.append("ROLLBACK_OBSERVATORY")
+
+        async with await WorkflowEnvironment.start_time_skipping() as env:
+            async with Worker(
+                env.client,
+                task_queue="test-tri-service-queue",
+                workflows=[PreprintDepositSagaWorkflow],
+                activities=[
+                    mock_publish_wp,
+                    mock_publish_mw,
+                    mock_deposit,
+                    mock_poll,
+                    mock_activate_wp,
+                    mock_activate_mw,
+                    mock_rollback_wp,
+                    mock_rollback_mw,
+                ],
+            ):
+                req = {
+                    **_make_request(),
+                    "syndicate_to_observatory": True,
+                }
+                res = await env.client.execute_workflow(
+                    PreprintDepositSagaWorkflow.run,
+                    req,
+                    id=f"test-tri-{req['idempotency_key']}",
+                    task_queue="test-tri-service-queue",
+                )
+
+        assert res["succeeded"] is True
+        assert res["post_id"] == 105
+        assert res["doi_status"] == "active"
+        assert res["wiki_url"] == "https://observatory.wiki/wiki/Lithic_Tools"
+        assert execution_order == [
+            "publish_wordpress_preprint",
+            "publish_observatory_preprint",
+            "deposit_crossref",
+            "poll_crossref_status",
+            "activate_wordpress_doi",
+            "activate_observatory_preprint",
+        ]
+        assert comp_log == []
+
+    @pytest.mark.asyncio
+    async def test_tri_service_crossref_rejection_triggers_lifo_compensation_across_wp_and_mw(
+        self,
+    ) -> None:
+        comp_log: list[str] = []
+
+        @activity.defn(name="publish_wordpress_preprint")
+        async def mock_publish_wp(req: dict) -> dict:
+            return {
+                "post_id": 106,
+                "post_url": "https://ind.media/registry/lithic-tools",
+                "doi": "10.67767/imi.2026.042",
+            }
+
+        @activity.defn(name="publish_observatory_preprint")
+        async def mock_publish_mw(req: dict) -> dict:
+            return {
+                "wiki_url": "https://observatory.wiki/wiki/Lithic_Tools",
+                "wiki_title": "Lithic Tools",
+            }
+
+        @activity.defn(name="deposit_crossref")
+        async def mock_deposit_fail(req: dict) -> dict:
+            raise RuntimeError("Crossref XML schema rejection: missing depositor")
+
+        @activity.defn(name="poll_crossref_status")
+        async def mock_poll(req: dict) -> dict:
+            return {}
+
+        @activity.defn(name="activate_wordpress_doi")
+        async def mock_activate_wp(req: dict) -> dict:
+            return {}
+
+        @activity.defn(name="activate_observatory_preprint")
+        async def mock_activate_mw(req: dict) -> dict:
+            return {}
+
+        @activity.defn(name="rollback_wordpress_preprint")
+        async def mock_rollback_wp(arg: dict) -> None:
+            comp_log.append(f"ROLLBACK_WP:{arg.get('post_id')}")
+
+        @activity.defn(name="rollback_observatory_preprint")
+        async def mock_rollback_mw(arg: dict) -> None:
+            comp_log.append(f"ROLLBACK_OBSERVATORY:{arg.get('wiki_title')}")
+
+        async with await WorkflowEnvironment.start_time_skipping() as env:
+            async with Worker(
+                env.client,
+                task_queue="test-tri-fail-queue",
+                workflows=[PreprintDepositSagaWorkflow],
+                activities=[
+                    mock_publish_wp,
+                    mock_publish_mw,
+                    mock_deposit_fail,
+                    mock_poll,
+                    mock_activate_wp,
+                    mock_activate_mw,
+                    mock_rollback_wp,
+                    mock_rollback_mw,
+                ],
+            ):
+                req = {
+                    **_make_request(),
+                    "syndicate_to_observatory": True,
+                }
+                res = await env.client.execute_workflow(
+                    PreprintDepositSagaWorkflow.run,
+                    req,
+                    id=f"test-tri-fail-{req['idempotency_key']}",
+                    task_queue="test-tri-fail-queue",
+                )
+
+        assert res["succeeded"] is False
+        assert res["doi_status"] == "pending"
+        assert "Crossref XML schema rejection" in res["error_message"]
+        # Invariant: LIFO order: MW first, then WP
+        assert comp_log == ["ROLLBACK_OBSERVATORY:Lithic Tools", "ROLLBACK_WP:106"]
+
 
 class TestPreprintActivitiesIntegration:
     """Activity integration tests using FakeWPClient and FakeCrossrefClient."""
@@ -278,3 +460,44 @@ class TestPreprintActivitiesIntegration:
             == "https://doi.org/10.67767/imi.2026.099"
         )
         assert bool(updated_post["meta"]["reg_doi_minted_date"])
+
+    @pytest.mark.asyncio
+    async def test_activities_tri_service_publication_and_rollback(self) -> None:
+        wp_fake = FakeWPClient()
+        mw_fake = FakeMWClient()
+        cr_fake = FakeCrossrefClient()
+
+        acts = SyndicationActivities(
+            wp_client=wp_fake,
+            mw_client=mw_fake,
+            sf_client=FakeSFClient(),
+            pardot_client=FakePardotClient(),
+            crossref_client=cr_fake,
+        )
+
+        req = _make_request(title="Acheulean Handaxe Distribution", doi_suffix="101")
+        req["syndicate_to_observatory"] = True
+
+        # Phase 1a: WP publish
+        wp_res = await acts.publish_wordpress_preprint(req)
+        assert wp_res["post_id"] > 0
+        post_id = wp_res["post_id"]
+
+        # Phase 1b: MW publish
+        mw_res = await acts.publish_observatory_preprint(req)
+        assert mw_res["wiki_title"] == "Acheulean Handaxe Distribution"
+        assert "Acheulean Handaxe Distribution" in mw_fake.pages
+
+        # Assert {{Preprint}} template banner is rendered in wiki page
+        assert (
+            "{{Preprint" in mw_fake.pages["Acheulean Handaxe Distribution"]["content"]
+        )
+
+        # Simulate failure rollback in LIFO order
+        await acts.rollback_observatory_preprint(mw_res)
+        await acts.rollback_wordpress_preprint(wp_res)
+
+        # Invariant: both stores purged
+        assert "Acheulean Handaxe Distribution" not in mw_fake.pages
+        matching_posts = [p for p in wp_fake.posts.values() if p["id"] == post_id]
+        assert len(matching_posts) == 0

@@ -174,6 +174,9 @@ async def start() -> None:
             activities.poll_crossref_status,
             activities.activate_wordpress_doi,
             activities.rollback_wordpress_preprint,
+            activities.publish_observatory_preprint,
+            activities.activate_observatory_preprint,
+            activities.rollback_observatory_preprint,
         ],
     )
     async with worker:

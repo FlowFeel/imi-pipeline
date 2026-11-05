@@ -307,3 +307,40 @@ class UrllibMWClient:
             return self._post(params)
         except Exception as exc:
             return {"error": str(exc)}
+
+    def delete_page(
+        self,
+        title: str,
+        reason: str = "",
+    ) -> dict[str, Any]:
+        """Delete a wiki page via ``action=delete``.
+
+        Used for saga compensation rollback.
+        Uses the cached CSRF token from :meth:`get_csrf_token`.
+        If no token is cached, attempts to auto-acquire one.
+
+        Never raises — returns an ``{"error": ...}`` dict on failure.
+
+        Args:
+            title: Title of the page to delete.
+            reason: Deletion summary for the logging table.
+
+        Returns:
+            The API response dict. On success contains
+            ``{"delete": {"title": ..., ...}}``.
+        """
+        try:
+            token = self._csrf_token
+            if token is None:
+                token = self.get_csrf_token()
+
+            params: dict[str, str] = {
+                "action": "delete",
+                "title": title,
+                "reason": reason,
+                "token": token,
+                "format": "json",
+            }
+            return self._post(params)
+        except Exception as exc:
+            return {"error": str(exc)}

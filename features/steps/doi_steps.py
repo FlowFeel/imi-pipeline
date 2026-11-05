@@ -589,13 +589,19 @@ def step_saga_executes_live_stack(context: Any) -> None:
 
     from phosphene.imi.activities import SyndicationActivities
     from phosphene.imi.crossref import HttpCrossrefClient
+    from phosphene.imi.fakes import FakeMWClient
     from phosphene.imi.workflow import PreprintDepositSagaWorkflow
 
     wp_client = HttpWPClient(WP_BASE_URL)
     crossref_client = HttpCrossrefClient(STUB_BASE_URL)
+    mw_client = getattr(context, "mw_client", None)
+    if mw_client is None:
+        mw_client = FakeMWClient()
+        context.mw_client = mw_client
+
     activities = SyndicationActivities(
         wp_client=wp_client,
-        mw_client=None,  # type: ignore[arg-type]
+        mw_client=mw_client,
         sf_client=None,  # type: ignore[arg-type]
         pardot_client=None,  # type: ignore[arg-type]
         crossref_client=crossref_client,
@@ -613,6 +619,9 @@ def step_saga_executes_live_stack(context: Any) -> None:
                     activities.poll_crossref_status,
                     activities.activate_wordpress_doi,
                     activities.rollback_wordpress_preprint,
+                    activities.publish_observatory_preprint,
+                    activities.activate_observatory_preprint,
+                    activities.rollback_observatory_preprint,
                 ],
             ):
                 return await env.client.execute_workflow(
@@ -660,3 +669,30 @@ def step_post_meta_prefix(context: Any, key: str, prefix: str) -> None:
     meta = _wp_meta(context.preprint_id)
     val = str(meta.get(key) or "")
     assert val.startswith(prefix), f"meta[{key}]={val!r}, expected prefix {prefix!r}"
+
+
+@given("the preprint request has Observatory MediaWiki syndication enabled")
+def step_enable_mw_syndication(context: Any) -> None:
+    context.saga_request["syndicate_to_observatory"] = True
+
+
+@then('the preprint page "{title}" is purged from MediaWiki')
+def step_mw_page_purged(context: Any, title: str) -> None:
+    mw_client = getattr(context, "mw_client", None)
+    assert mw_client is not None, "No MediaWiki client found in context"
+    assert not mw_client.page_exists(title), (
+        f"Expected page {title!r} to be purged from MediaWiki"
+    )
+
+
+@then('the preprint page "{title}" exists on MediaWiki')
+def step_mw_page_exists(context: Any, title: str) -> None:
+    mw_client = getattr(context, "mw_client", None)
+    assert mw_client is not None, "No MediaWiki client found in context"
+    assert mw_client.page_exists(title), (
+        f"Expected page {title!r} to exist on MediaWiki"
+    )
+    page = mw_client.pages[title]
+    assert "{{Preprint" in page.get("content", ""), (
+        f"Expected {{{{Preprint}}}} banner in page: {page}"
+    )

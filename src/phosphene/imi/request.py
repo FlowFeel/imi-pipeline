@@ -158,6 +158,7 @@ class PreprintDepositRequest:
     target_url: str = ""
     publisher_id: str = "flow"
     idempotency_key: str = ""
+    syndicate_to_observatory: bool = False
 
     def __post_init__(self) -> None:
         if not self.idempotency_key:
@@ -180,5 +181,7 @@ class PreprintDepositResult:
     doi: str = ""
     deposit_id: str = ""
     doi_status: str = "pending"
+    wiki_url: str = ""
+    wiki_title: str = ""
     error_message: str = ""
     compensations_executed: list[str] = field(default_factory=list)

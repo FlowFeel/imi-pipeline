@@ -110,3 +110,24 @@ Feature: Deliverable Base Cases for DOI Preprint Lifecycle
     And the post meta "reg_doi" is "10.67767/imi.2026.905"
     And the post meta "reg_crossref_deposit_id" has prefix "cr-dep-"
     And resolving the DOI "10.67767/imi.2026.905" redirects to the preprint landing page
+
+
+  Scenario: Tri-service preprint syndication purges both WordPress post and MediaWiki page when Crossref deposit fails
+    Given a valid preprint deposit request for "Faulty Tool Stratigraphy" with DOI suffix "imi.2026.906"
+    And the preprint request has Observatory MediaWiki syndication enabled
+    And the Crossref stub is scripted to return "reject" for suffix "906"
+    When the preprint publication saga executes against the live stack
+    Then the saga execution fails with a Crossref rejection error
+    And the preprint post is permanently purged from WordPress
+    And the preprint page "Faulty Tool Stratigraphy" is purged from MediaWiki
+    And resolving the unregistered DOI "10.67767/imi.2026.906" returns 404
+
+  Scenario: Tri-service preprint syndication completes publication across WordPress, MediaWiki, and Crossref
+    Given a valid preprint deposit request for "Holocene Obsidian Trade" with DOI suffix "imi.2026.907"
+    And the preprint request has Observatory MediaWiki syndication enabled
+    When the preprint publication saga executes against the live stack
+    Then the saga completes successfully
+    And the post meta "reg_doi_status" is "active"
+    And the post meta "reg_doi" is "10.67767/imi.2026.907"
+    And the preprint page "Holocene Obsidian Trade" exists on MediaWiki
+    And resolving the DOI "10.67767/imi.2026.907" redirects to the preprint landing page
