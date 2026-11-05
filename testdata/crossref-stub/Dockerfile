@@ -1,5 +1,6 @@
-# Crossref deposit stub — stdlib only, no pip install, fully deterministic.
+# Hermetic Crossref Schema 5.3.1 Simulator Container
 FROM python:3.12-alpine
+COPY crossref_simulator.py /app/crossref_simulator.py
 COPY stub_crossref.py /app/stub_crossref.py
 WORKDIR /app
 EXPOSE 8000
