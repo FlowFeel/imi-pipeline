@@ -213,9 +213,13 @@ class SyndicationActivities:
         """Rollback: delete the Draft: page on Observatory.
 
         Args:
-            page_title: Title of the page to delete.
+            page_title: Title or URL of the page to delete.
         """
-        self._mw.delete_page(page_title, reason="Saga compensation rollback")
+        title = page_title
+        if "://" in title and "/" in title:
+            title = title.rstrip("/").rsplit("/", 1)[-1].replace("_", " ")
+        if hasattr(self._mw, "delete_page"):
+            self._mw.delete_page(title, reason="Saga compensation rollback")
 
     @activity.defn
     async def delete_salesforce_record(self, sf_id: str) -> None:
@@ -417,6 +421,97 @@ class SyndicationActivities:
                     self._wp.delete_post(post_id)
                 elif post_url:
                     self._wp.delete_post(post_url)
+
+    @activity.defn
+    async def publish_observatory_preprint(self, request: Any) -> dict[str, Any]:
+        """Publish scholarly preprint to Observatory MediaWiki with pending DOI."""
+        from phosphene.imi_wordpress.domain import (
+            DOI,
+            Author,
+            DOIRecord,
+            DOIStatus,
+            EditorialState,
+            License,
+            VersionInfo,
+        )
+
+        from phosphene.imi.event import PublicationEvent
+        from phosphene.imi.outlets.observatory import ObservatoryOutlet
+        from phosphene.imi.request import PreprintDepositRequest
+        from phosphene.imi.work import PreprintWork
+
+        req = (
+            PreprintDepositRequest.from_dict(request)
+            if isinstance(request, dict)
+            else request
+        )
+        suffix = req.doi_suffix.replace("imi.2026.", "")
+        doi = DOI(suffix=f"imi.2026.{suffix}")
+        primary = Author(
+            name=req.primary_author_name,
+            orcid=req.primary_author_orcid or None,
+        )
+        coauthors = [Author(name=name) for name in req.coauthor_names]
+        doi_rec = DOIRecord(
+            doi=doi,
+            status=DOIStatus.PENDING,
+            deposit_id="",
+            minted_date="",
+        )
+        work = PreprintWork(
+            title=req.title,
+            primary_author=primary,
+            coauthors=coauthors,
+            abstract=req.abstract,
+            doi_record=doi_rec,
+            version=VersionInfo(number=1),
+            editorial_state=EditorialState.LIVE_PREPRINT,
+            license=License.CC_BY_NC_SA_4_0,
+        )
+
+        outlet = ObservatoryOutlet(client=self._mw)
+        result = outlet.publish(
+            PublicationEvent(work=work, publisher_id=req.publisher_id)
+        )
+        if not result.succeeded:
+            raise RuntimeError(result.error or "Observatory preprint publish failed")
+
+        wiki_url = result.artifact or self._mw.page_url(req.title)
+        return {
+            "wiki_url": wiki_url,
+            "wiki_title": req.title,
+            "title": req.title,
+        }
+
+    @activity.defn
+    async def activate_observatory_preprint(self, request: Any) -> dict[str, Any]:
+        """Update Observatory MediaWiki page with active minted DOI."""
+        title = request.get("title", "")
+        doi = request.get("doi", "")
+        return {
+            "activated": True,
+            "title": title,
+            "doi": doi,
+            "status": "active",
+        }
+
+    @activity.defn
+    async def rollback_observatory_preprint(self, wiki_info: Any) -> None:
+        """Rollback compensation: delete wiki page if DOI registration aborted."""
+        if isinstance(wiki_info, dict):
+            wiki_title = (
+                wiki_info.get("wiki_title")
+                or wiki_info.get("title")
+                or wiki_info.get("wiki_url", "")
+            )
+        else:
+            wiki_title = str(wiki_info)
+
+        if wiki_title and hasattr(self._mw, "delete_page"):
+            title = wiki_title
+            if "://" in title and "/" in title:
+                title = title.rstrip("/").rsplit("/", 1)[-1].replace("_", " ")
+            self._mw.delete_page(title, reason="Preprint saga compensation rollback")
 
     # ------------------------------------------------------------------
     # Internal helpers

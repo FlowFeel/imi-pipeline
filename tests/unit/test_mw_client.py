@@ -360,3 +360,36 @@ class TestErrorHandling:
 
         assert "error" in result
         assert "Connection refused" in result["error"]
+
+
+class TestDeletePage:
+    """UrllibMWClient.delete_page tests."""
+
+    def test_delete_page_sends_action_delete(self) -> None:
+        """delete_page sends action=delete with title, reason, and token."""
+        from phosphene.imi.clients.mediawiki import MWConfig, UrllibMWClient
+
+        cfg = MWConfig(
+            base_url="https://observatory.wiki",
+            username="bot",
+            password="pass",
+        )
+        client = UrllibMWClient(cfg)
+        client._csrf_token = "token+\\"
+
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = json.dumps(
+            {"delete": {"title": "Test Page", "reason": "Saga rollback"}}
+        ).encode("utf-8")
+        mock_resp.__enter__.return_value = mock_resp
+
+        with patch(
+            "urllib.request.OpenerDirector.open", return_value=mock_resp
+        ) as mock_open:
+            res = client.delete_page("Test Page", reason="Saga rollback")
+
+        assert "delete" in res
+        req = mock_open.call_args[0][0]
+        assert b"action=delete" in req.data
+        assert b"title=Test+Page" in req.data
+        assert b"reason=Saga+rollback" in req.data

@@ -146,3 +146,15 @@ class MWClientAdapter:
         page = self._site.pages[title]
         page.edit(content, summary)
         return {"url": self.page_url(title), "title": title}
+
+    def delete_page(self, title: str, reason: str = "") -> None:
+        """Delete a wiki page via mwclient.
+
+        Used for saga compensation rollback.
+
+        Args:
+            title: Page title to delete.
+            reason: Reason for deletion.
+        """
+        page = self._site.pages[title]
+        page.delete(reason=reason)

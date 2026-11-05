@@ -45,6 +45,8 @@ def create_mediawiki_mock_app() -> Flask:
             return _handle_query()
         elif action == "edit":
             return _handle_edit(_pages, _last_edit_request)
+        elif action == "delete":
+            return _handle_delete(_pages)
         else:
             return jsonify(
                 {
@@ -167,6 +169,21 @@ def _handle_edit(
                 "oldrevid": 0,
                 "newrevid": 100,
                 "newtimestamp": "2026-06-22T00:00:00Z",
+            }
+        }
+    )
+
+
+def _handle_delete(pages: dict[str, str]) -> Response:
+    """Handle delete action — remove a page from store."""
+    title = request.form.get("title", "")
+    pages.pop(title, None)
+    return jsonify(
+        {
+            "delete": {
+                "title": title,
+                "reason": request.form.get("reason", ""),
+                "logid": 9999,
             }
         }
     )
