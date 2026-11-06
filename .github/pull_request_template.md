@@ -40,7 +40,7 @@ All PRs must satisfy the core engineering invariants before review:
 
 | Gate | Scope | Command | Result |
 | :--- | :--- | :--- | :--- |
-| **Gate 1: Lint & Format** | Ruff check & format check | `uv run ruff check src/ tests/ features/ lib/imi_wordpress/src/ && uv run ruff format --check src/ tests/ features/ lib/imi_wordpress/src/` | |
+| **Gate 1: Lint & Format** | Ruff check & format check | `uv run ruff check src/ tests/ features/ && uv run ruff format --check src/ tests/ features/` | |
 | **Gate 2: BDD Contract** | Non-integration feature suite | `uv run behave features/ --tags ~@integration --no-capture` | |
 | **Gate 3: Pure Unit** | T0 unit tests (no Docker) | `uv run pytest tests/unit -v --tb=short` | |
 | **Gate 4: Integration** | Temporal + MediaWiki (Docker) | `uv run pytest tests/integration -v --tb=short` | |

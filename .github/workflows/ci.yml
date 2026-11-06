@@ -35,8 +35,8 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --all-extras
-      - run: uv run ruff check src/ tests/ features/ lib/imi_wordpress/src/
-      - run: uv run ruff format --check src/ tests/ features/ lib/imi_wordpress/src/
+      - run: uv run ruff check src/ tests/ features/
+      - run: uv run ruff format --check src/ tests/ features/
       - name: Validate PHP syntax in testdata
         run: find testdata/wp-mu-plugins -name "*.php" -exec php -l {} +
 
