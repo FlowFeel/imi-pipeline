@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import xml.etree.ElementTree as ET
 
+import pytest
 from phosphene.imi_wordpress.domain import (
     DOI,
     Author,
@@ -136,12 +137,10 @@ class TestCrossrefXmlBuilder:
         xml_dummy = CrossrefXmlBuilder.build_xml(work_dummy, "https://ind.media/test")
         assert "<ORCID>" not in xml_dummy
 
-        # Invalid format string MUST be omitted
-        work_invalid = _make_preprint(primary_orcid="not-an-orcid")
-        xml_invalid = CrossrefXmlBuilder.build_xml(
-            work_invalid, "https://ind.media/test"
-        )
-        assert "<ORCID>" not in xml_invalid
+        # Invalid format string MUST be rejected at domain boundary
+        with pytest.raises(ValueError, match="Malformed ORCID"):
+            _make_preprint(primary_orcid="not-an-orcid")
+        assert CrossrefXmlBuilder.normalize_orcid("not-an-orcid") is None
 
     def test_xml_escaping(self) -> None:
         work = _make_preprint(

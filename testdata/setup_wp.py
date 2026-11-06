@@ -67,18 +67,6 @@ def main() -> int:
     container = find_container(PORT)
     print(f"Found container: {container}")
 
-    # Install wp-cli
-    print("Installing wp-cli...")
-    wp_cli_url = (
-        "https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar"
-    )
-    _docker_exec(
-        container,
-        "bash",
-        "-c",
-        f"curl -sL {wp_cli_url} -o /usr/local/bin/wp && chmod +x /usr/local/bin/wp",
-    )
-
     # Core install
     print("Running wp core install...")
     _docker_exec(

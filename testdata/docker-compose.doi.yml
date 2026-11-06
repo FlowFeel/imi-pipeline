@@ -16,9 +16,9 @@ services:
     networks:
       - doi-net
 
-  # ── WordPress with the imi_registry mu-plugins ─────────────────────────────
+  # ── WordPress with the imi_registry testbed image ─────────────────────────
   doi-wp:
-    image: wordpress:6.4-php8.2-apache
+    image: ghcr.io/flowfeel/imi-registry-testbed:v1.0.0
     depends_on:
       doi-db:
         condition: service_healthy
@@ -31,8 +31,6 @@ services:
       WORDPRESS_DB_PASSWORD: "testpass"
       WORDPRESS_DEBUG: "1"
       CROSSREF_DEPOSIT_URL: http://doi-stub:8000/servlet/deposit
-    volumes:
-      - ./wp-mu-plugins:/var/www/html/wp-content/mu-plugins:ro
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost/"]
       interval: 10s
