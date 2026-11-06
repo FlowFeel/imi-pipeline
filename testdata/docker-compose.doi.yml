@@ -18,7 +18,7 @@ services:
 
   # ── WordPress with the imi_registry testbed image ─────────────────────────
   doi-wp:
-    image: ghcr.io/flowfeel/imi-registry-testbed:v1.0.0
+    image: ${REGISTRY_TESTBED_IMAGE:-ghcr.io/janfrel/imi-registry-testbed:v1.0.0}
     depends_on:
       doi-db:
         condition: service_healthy

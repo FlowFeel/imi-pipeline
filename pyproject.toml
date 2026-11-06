@@ -21,7 +21,7 @@ members = ["lib/temporal"]
 
 [tool.uv.sources]
 phosphene-temporal = { workspace = true }
-phosphene-imi-wordpress = { git = "https://github.com/janfrel/imi-wordpress.git", branch = "feat/artifact-upgrade-phosphene-imi-wordpress" }
+phosphene-imi-wordpress = { git = "https://github.com/janfrel/imi-wordpress.git", branch = "main" }
 
 [project.optional-dependencies]
 dev = [
