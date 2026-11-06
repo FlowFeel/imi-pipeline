@@ -13,15 +13,15 @@ dependencies = [
     "temporalio>=1.6",
     "mwclient>=0.11.0",
     "phosphene-temporal",
-    "imi-wordpress",
+    "phosphene-imi-wordpress>=1.0.0",
 ]
 
 [tool.uv.workspace]
-members = ["lib/temporal", "lib/imi_wordpress"]
+members = ["lib/temporal"]
 
 [tool.uv.sources]
 phosphene-temporal = { workspace = true }
-imi-wordpress = { workspace = true }
+phosphene-imi-wordpress = { git = "https://github.com/phosphene/phosphene-py-packages.git", subdirectory = "packages/phosphene-imi-wordpress" }
 
 [project.optional-dependencies]
 dev = [
